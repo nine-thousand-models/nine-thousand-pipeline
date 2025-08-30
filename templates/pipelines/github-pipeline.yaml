@@ -1,0 +1,59 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: fan-out-pipeline
+spec:
+  params:
+    - name: GIT_URL
+      type: string
+      default: ""
+    - name: GIT_REPO_NAME
+      type: string
+      default: ""
+    - name: GIT_SHORT_REVISION
+      type: string
+      default: ""
+    - name: GIT_BRANCH
+      type: string
+      default: "main"
+    - name: GIT_COMMIT_AUTHOR
+      type: string
+      default: ""
+    - name: TARGET_PIPELINE
+      type: string
+      default: "downstream-pipeline"
+    - name: ADDED_FILES
+      type: string
+      default: ""
+    - name: REMOVED_FILES
+      type: string
+      default: ""
+    - name: MODIFIED_FILES
+      type: string
+      default: ""
+  tasks:
+    # Fan Out Task to display added, removed, and modified files
+    - name: fan-out-task
+      taskRef:
+        name: fan-out-task
+        kind: Task
+      params:
+        - name: ADDED_FILES 
+          value: "$(params.ADDED_FILES)"
+        - name: REMOVED_FILES
+          value: "$(params.REMOVED_FILES)"
+        - name: MODIFIED_FILES
+          value: "$(params.MODIFIED_FILES)"
+        - name: GIT_URL
+          value: "$(params.GIT_URL)"
+        - name: GIT_REPO_NAME
+          value: "$(params.GIT_REPO_NAME)"
+        - name: GIT_SHORT_REVISION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: GIT_COMMIT_AUTHOR
+          value: "$(params.GIT_COMMIT_AUTHOR)"
+        - name: TARGET_PIPELINE
+          value: "ct-pipeline"
+
+

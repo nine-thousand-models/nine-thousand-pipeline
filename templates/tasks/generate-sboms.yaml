@@ -1,0 +1,42 @@
+{{ if eq .Values.generate_sboms true }}
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: generate-sbom
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: APPLICATION_NAME
+      description: Name of the application
+      type: string
+    - name: PROJECT_NAME
+      description: Name of the OpenShift project
+      type: string
+    - name: VERSION
+      description: Version of the application
+      type: string
+    - name: COSIGN_VERSION
+      type: string
+      description: Version of cosign CLI
+      default: 2.4.3
+    - name: WORK_DIRECTORY
+      description: Directory to start build in (handle multiple branches)
+      type: string
+  steps:
+    - name: generate-sbom
+      image: quay.io/openshift/origin-cli:4.12
+      workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+      script: |
+        #!/usr/bin/env bash
+        curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /tmp
+        chmod -R 775 /tmp/syft
+
+        curl -skL -o /tmp/cosign https://github.com/sigstore/cosign/releases/download/v$(params.COSIGN_VERSION)/cosign-linux-amd64
+        chmod -R 775 /tmp/cosign
+
+        oc registry login
+        /tmp/syft -o spdx `oc registry info`/$(params.PROJECT_NAME)-test/$(params.APPLICATION_NAME):$(params.VERSION) > $(params.PROJECT_NAME)-test-$(params.APPLICATION_NAME)-$(params.VERSION).sbom
+        /tmp/cosign attest --key k8s://$(params.PROJECT_NAME)-toolings/$(params.PROJECT_NAME)-cosign --yes --predicate $(params.PROJECT_NAME)-test-$(params.APPLICATION_NAME)-$(params.VERSION).sbom `oc registry info`/$(params.PROJECT_NAME)-test/$(params.APPLICATION_NAME):$(params.VERSION)
+{{- end }}

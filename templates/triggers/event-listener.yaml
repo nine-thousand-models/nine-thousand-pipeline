@@ -1,0 +1,26 @@
+# might need to update based on the Git Server we choose
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: ct-listener
+spec:
+  triggers:
+    - triggerRef: fan-out-github-trigger
+    # - triggerRef: ct-s3-trigger
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: el-ct-listener
+spec:
+  to:
+    kind: Service
+    name: el-ct-listener
+    weight: 100
+  port:
+    targetPort: http-listener
+  wildcardPolicy: None
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

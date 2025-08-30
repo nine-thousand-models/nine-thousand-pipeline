@@ -1,0 +1,98 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: execute-ds-pipeline
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: WORK_DIRECTORY
+      description: Directory to start build in (handle multiple branches)
+      type: string
+    - name: MODEL_NAME
+      description: Name of the model
+      type: string
+    - name: GIT_SHORT_REVISION
+      description: Short Git commit hast
+      type: string
+  results:
+    - name: KFP_RUN_ID
+      description: Run ID of the Data Science Pipeline
+  steps:
+  - name: execute-ds-pipeline
+    workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+    image: registry.redhat.io/ubi9/python-311@sha256:fc669a67a0ef9016c3376b2851050580b3519affd5ec645d629fd52d2a8b8e4a
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "Executing Data Science Pipeline for model: $(params.MODEL_NAME) and version: $(params.GIT_SHORT_REVISION)"
+      echo "Working directory: $(workspaces.output.path)/$(params.WORK_DIRECTORY)"
+      ls -l 
+      cat $(params.MODEL_NAME).json
+
+      # python3 -m pip install kfp.kubernetes==1.3.0 kfp==2.9.0
+      # cat << 'EOF' | python3
+      # import kfp
+      # import json
+      # from prod_train_save_pipeline import training_pipeline
+
+      # namespace_file_path =\
+      #     '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
+      # with open(namespace_file_path, 'r') as namespace_file:
+      #     namespace = namespace_file.read()
+
+      # kubeflow_endpoint =\
+      #     f'https://ds-pipeline-dspa.{namespace}.svc:8443'
+
+      # sa_token_file_path = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+      # with open(sa_token_file_path, 'r') as token_file:
+      #     bearer_token = token_file.read()
+
+      # ssl_ca_cert =\
+      #     '/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt'
+
+      # print(f'Connecting to Data Science Pipelines: {kubeflow_endpoint}')
+      # client = kfp.Client(
+      #     host=kubeflow_endpoint,
+      #     existing_token=bearer_token,
+      #     ssl_ca_cert=ssl_ca_cert
+      # )
+
+      # with open('default_parameters.json') as f:
+      #     default_parameters = json.load(f)
+      
+      # default_parameters['version'] = "$(params.GIT_SHORT_REVISION)"
+      # default_parameters['model_name'] = "$(params.MODEL_NAME)"
+      # default_parameters['model_storage_pvc'] = "$(params.MODEL_NAME)-model-pvc"
+      # default_parameters['cluster_domain'] = "{{ .Values.cluster_domain }}"
+      # default_parameters['prod_flag'] = True
+
+      # # start a run
+      # print("🏃‍♂️ start a run")
+      # run_id = client.create_run_from_pipeline_func(
+      #     training_pipeline,
+      #     arguments=default_parameters,
+      #     experiment_name="$(params.MODEL_NAME)-model-training",
+      #     namespace=namespace,
+      #     enable_caching=True
+      # )
+
+      # print("🥱 wait for the run to finish")
+      # # wait for the run to finish
+      # client.wait_for_run_completion(
+      #     run_id=run_id.run_id, 
+      #     timeout=7200,
+      #     sleep_duration=5,
+      # )
+      
+      # # save run id to store it in model metadata for tracing
+      # KFP_RUN_ID = run_id.run_id
+      # path = "$(results.KFP_RUN_ID.path)"
+
+      # with open(path, "w") as file:
+      #     file.write(KFP_RUN_ID)
+
+      # print("🎉 job finished 🙌")
+      # EOF
+

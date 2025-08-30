@@ -1,0 +1,53 @@
+{{ if eq .Values.image_scan true }}
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: rox-image-scan
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: ROX_SECRET
+      type: string
+      description: Secret containing the Stackrox endpoint and token as (username and password)
+      default: rox-auth
+    - name: APPLICATION_NAME
+      description: Name of the application
+      type: string
+    - name: PROJECT_NAME
+      description: Name of the OpenShift project
+      type: string
+    - name: VERSION
+      description: Version of the application
+      type: string
+    - name: OUTPUT_FORMAT
+      type: string
+      description:  Output format (json | csv | table)
+      default: json
+    - name: WORK_DIRECTORY
+      description: Directory to start build in (handle multiple branches)
+  steps:
+    - name: rox-image-scan
+      image: registry.access.redhat.com/ubi8/ubi-minimal:latest
+      workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+      env:
+        - name: ROX_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: $(params.ROX_SECRET)
+              key: password
+        - name: ROX_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: $(params.ROX_SECRET)
+              key: username
+      script: |
+        #!/usr/bin/env bash
+        set +x
+        export NO_COLOR="True"
+        curl -k -L -H "Authorization: Bearer $ROX_API_TOKEN" https://$ROX_ENDPOINT/api/cli/download/roxctl-linux --output roxctl  > /dev/null; echo "Getting roxctl"
+        chmod +x roxctl > /dev/null
+        ./roxctl image scan --insecure-skip-tls-verify -e $ROX_ENDPOINT:443 --image image-registry.openshift-image-registry.svc:5000/$(params.PROJECT_NAME)-test/$(params.APPLICATION_NAME):$(params.VERSION) -o $(params.OUTPUT_FORMAT) --cluster my-cluster
+{{- end }}
+

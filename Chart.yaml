@@ -1,0 +1,10 @@
+---
+apiVersion: v2
+description: A Helm chart for deploying Tekton Pipeline 🐈
+name: tekton
+version: 0.0.6
+home: https://rhoai-mlops.github.io/mlops/
+maintainers:
+  - name: RHRolun
+  - name: rcarrata
+  - name: ckavili

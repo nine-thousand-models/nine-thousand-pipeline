@@ -1,0 +1,43 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-modelcar
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: MODEL_NAME
+      description: Name of the application
+      type: string
+    - name: PROJECT_NAME
+      description: MLOps environment name :)
+      type: string
+    - name: VERSION
+      description: Version of the application
+      type: string
+  steps:
+    - name: create-dockerfile
+      workingDir: $(workspaces.output.path)
+      image: quay.io/openshift/origin-cli:4.14
+      script: |
+        #!/bin/sh
+        echo "Creating Dockerfile for model: $(params.MODEL_NAME).onnx"
+        # cat <<EOF > Dockerfile
+        # FROM registry.access.redhat.com/ubi9/ubi-minimal:9.4
+        # WORKDIR /models/1
+        # RUN mkdir -p /models/1/artifacts
+        # COPY $(params.MODEL_NAME).onnx .
+        # COPY artifacts/ artifacts/
+        # USER 1001
+        # EOF
+    - name: openshift-build
+      workingDir: $(workspaces.output.path)
+      image: quay.io/openshift/origin-cli:4.14
+      script: |
+        #!/bin/sh
+        echo "Building and Pushing the model image: $(params.MODEL_NAME):$(params.VERSION) to project: $(params.PROJECT_NAME)"
+        # oc new-build --binary --name=$(params.MODEL_NAME) -l app=$(params.MODEL_NAME) -l app.kubernetes.io/name=$(params.MODEL_NAME) --strategy=docker || rc=$?
+        # oc start-build $(params.MODEL_NAME) --from-dir=. --follow --wait
+        # oc tag $(params.PROJECT_NAME)-toolings/$(params.MODEL_NAME):latest $(params.PROJECT_NAME)/$(params.MODEL_NAME):$(params.VERSION)
+        # oc tag $(params.PROJECT_NAME)-toolings/$(params.MODEL_NAME):latest $(params.PROJECT_NAME)-prod/$(params.MODEL_NAME):$(params.VERSION)

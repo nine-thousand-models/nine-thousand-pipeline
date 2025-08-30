@@ -1,0 +1,270 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: ct-pipeline
+spec:
+  workspaces:
+    - name: shared-workspace
+    - name: model-workspace
+  params:
+    - name: GIT_REPO_NAME
+      type: string
+      default: ""
+    - name: PROJECT_NAME
+      type: string
+      default: "fika"
+    - name: GIT_URL
+      type: string
+      default: ""
+    - name: GIT_SHORT_REVISION
+      type: string
+      default: ""
+    - name: GIT_BRANCH
+      type: string
+      default: ""
+    - name: GIT_COMMIT_AUTHOR
+      type: string
+      default: ""
+    - name: MODEL_NAME
+      type: string
+      default: ""
+  tasks:
+    # Clone jukebox repository
+    - name: fetch-config-repository
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines 
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: URL
+          value: "$(params.GIT_URL)"
+        - name: REVISION
+          value: "main"
+        - name: SUBDIRECTORY
+          value: "$(params.GIT_REPO_NAME)/$(params.GIT_BRANCH)/$(params.MODEL_NAME)"
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: SSL_VERIFY
+          value: "false"
+  
+    # Execute Data Science Pipeline
+    - name: execute-ds-pipeline
+      taskRef:
+        name: execute-ds-pipeline
+        kind: Task
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: WORK_DIRECTORY
+          value: "$(params.GIT_REPO_NAME)/$(params.GIT_BRANCH)/$(params.MODEL_NAME)"
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: GIT_SHORT_REVISION
+          value: "$(params.GIT_SHORT_REVISION)"
+      runAfter:
+        - fetch-config-repository
+
+    # Scan the model
+    - name: scan-model
+      taskRef:
+        name: scan-model
+        kind: Task
+      workspaces:
+        - name: output
+          workspace: model-workspace
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+      runAfter:
+        - execute-ds-pipeline
+
+    - name: build-modelcar
+      taskRef:
+        name: build-modelcar
+        kind: Task
+      workspaces:
+        - name: output
+          workspace: model-workspace
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: VERSION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: PROJECT_NAME
+          value: "fika" 
+      runAfter:
+        - scan-model
+
+
+  #   {{ if eq .Values.image_scan true }}
+  #   # Image Scanning
+  #   - name: image-scan
+  #     runAfter:
+  #     - build-modelcar
+  #     taskRef:
+  #       name: rox-image-scan
+  #     workspaces:
+  #       - name: output
+  #         workspace: shared-workspace
+  #     params:
+  #       - name: APPLICATION_NAME
+  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: PROJECT_NAME
+  #         value: "{{ .Values.USER_NAME }}"
+  #       - name: VERSION
+  #         value: "$(params.GIT_SHORT_REVISION)"
+  #       - name: WORK_DIRECTORY
+  #         value: "$(params.APPLICATION_NAME)/$(params.GIT_BRANCH)"
+  #       - name: OUTPUT_FORMAT
+  #         value: table
+  #   {{- end }}
+
+  #   {{ if eq .Values.image_signing true }}
+  #   # Image Signing
+  #   - name: image-signing
+  #     runAfter:
+  #     - image-scan
+  #     taskRef:
+  #       name: image-signing
+  #     workspaces:
+  #       - name: output
+  #         workspace: shared-workspace
+  #     params:
+  #       - name: APPLICATION_NAME
+  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: PROJECT_NAME
+  #         value: "{{ .Values.USER_NAME }}"
+  #       - name: VERSION
+  #         value: "$(params.GIT_SHORT_REVISION)"
+  #       - name: WORK_DIRECTORY
+  #         value: "$(params.APPLICATION_NAME)/$(params.GIT_BRANCH)"
+  #    {{- end }}
+
+  #   # Generate SBOMs
+  #   {{- if eq .Values.generate_sboms true }}
+  #   - name: generate-sbom
+  #     runAfter:
+  #     - image-signing
+  #     taskRef:
+  #       name: generate-sbom
+  #     workspaces:
+  #       - name: output
+  #         workspace: shared-workspace
+  #     params:
+  #       - name: APPLICATION_NAME
+  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: PROJECT_NAME
+  #         value: "{{ .Values.USER_NAME }}"
+  #       - name: VERSION
+  #         value: "$(params.GIT_SHORT_REVISION)"
+  #       - name: WORK_DIRECTORY
+  #         value: "$(params.APPLICATION_NAME)/$(params.GIT_BRANCH)"
+  #   {{- end }}
+
+  #   # Fetch GitOps repository
+  #   - name: fetch-gitops-repository
+  #     taskRef:
+  #       resolver: cluster
+  #       params:
+  #         - name: kind
+  #           value: task
+  #         - name: name
+  #           value: git-clone
+  #         - name: namespace
+  #           value: openshift-pipelines 
+  #     workspaces:
+  #       - name: output
+  #         workspace: shared-workspace
+  #     params:
+  #       - name: URL
+  #         value: "https://gitea-gitea.{{ .Values.cluster_domain }}/{{ .Values.USER_NAME }}/mlops-gitops.git"
+  #       - name: REVISION
+  #         value: "main"
+  #       - name: SUBDIRECTORY
+  #         value: "mlops-gitops/main"
+  #       - name: DELETE_EXISTING
+  #         value: "true"
+  #       - name: SSL_VERIFY
+  #         value: "false"
+  #     runAfter:
+  #       - build-modelcar
+
+  #   # Update model version in Git
+  #   - name: deploy-test
+  #     taskRef:
+  #       name: deploy-or-raise-pr
+  #       kind: Task
+  #     runAfter:
+  #       - fetch-gitops-repository
+  #     workspaces:
+  #       - name: output
+  #         workspace: shared-workspace
+  #     params:
+  #       - name: APPLICATION_NAME
+  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: VERSION
+  #         value: "$(params.GIT_SHORT_REVISION)"
+  #       - name: WORK_DIRECTORY
+  #         value: "mlops-gitops/main/model-deployments/"
+  #       - name: DEPLOY_ENVIRONMENT
+  #         value: "test"
+  #       - name: PROJECT_NAME
+  #         value: {{ .Values.USER_NAME }}
+          
+  #   # update model metadata
+  #   - name: update-model-metadata
+  #     taskRef:
+  #       name: update-model-metadata
+  #       kind: Task
+  #     runAfter:
+  #       - deploy-test
+  #     params:
+  #       - name: APPLICATION_NAME
+  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: VERSION
+  #         value: "$(params.GIT_SHORT_REVISION)"
+  #       - name: DEPLOY_ENVIRONMENT
+  #         value: "test"
+  #       - name: PROJECT_NAME
+  #         value: {{ .Values.USER_NAME }}
+  #       - name: KFP_RUN_ID
+  #         value: "$(tasks.execute-ds-pipeline.results.KFP_RUN_ID)"
+  #       - name: GIT_COMMIT_AUTHOR
+  #         value: "$(params.GIT_COMMIT_AUTHOR)"
+
+  #   # Raise a PR for prod
+  #   - name: raise-pr-for-prod
+  #     taskRef:
+  #       name: deploy-or-raise-pr
+  #       kind: Task
+  #     runAfter:
+  #       - deploy-test
+  #     workspaces:
+  #       - name: output
+  #         workspace: shared-workspace
+  #     params:
+  #       - name: APPLICATION_NAME
+  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: VERSION
+  #         value: "$(params.GIT_SHORT_REVISION)"
+  #       - name: WORK_DIRECTORY
+  #         value: "mlops-gitops/main/model-deployments/"
+  #       - name: DEPLOY_ENVIRONMENT
+  #         value: "prod"
+  #       - name: PROJECT_NAME
+  #         value: {{ .Values.USER_NAME }}
+          
+  # results:
+  #   - name: KFP_RUN_ID
+  #     description: Run ID of the Data Science Pipeline
+  #     value: "$(tasks.execute-ds-pipeline.results.KFP_RUN_ID)"

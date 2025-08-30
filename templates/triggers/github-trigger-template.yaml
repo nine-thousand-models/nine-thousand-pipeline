@@ -1,0 +1,48 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1	
+kind: TriggerTemplate
+metadata:
+  name: fan-out-github-trigger-template
+spec:
+  params:
+    - name: gitrepositoryurl
+      description: The git repository url
+    - name: git-repo-name
+      description: The name of the deployment to be created / patched
+    - name: git-branch
+      description: The git branch name
+    - name: git-short-revision
+      description: Seven character git sha
+    - name: git-commit-author
+      description: Author of the git commit
+    - name: added_files
+      description: List of added files in the commit (JSON array as string)
+    - name: removed_files
+      description: List of removed files in the commit (JSON array as string)
+    - name: modified_files
+      description: List of modified files in the commit (JSON array as string)
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: fan-out-pipeline-
+      spec:
+        pipelineRef:
+          name: fan-out-pipeline
+        params:
+          - name: GIT_REPO_NAME
+            value: $(tt.params.git-repo-name)
+          - name: GIT_URL
+            value: $(tt.params.gitrepositoryurl)
+          - name: GIT_SHORT_REVISION
+            value: $(tt.params.git-short-revision)
+          - name: GIT_BRANCH
+            value: $(tt.params.git-branch)
+          - name: GIT_COMMIT_AUTHOR
+            value: $(tt.params.git-commit-author)
+          - name: ADDED_FILES
+            value: "$(tt.params.added_files)"
+          - name: REMOVED_FILES
+            value: "$(tt.params.removed_files)"
+          - name: MODIFIED_FILES
+            value: "$(tt.params.modified_files)"

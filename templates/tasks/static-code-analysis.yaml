@@ -1,0 +1,29 @@
+{{ if eq .Values.static_code_analysis true }}
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: static-code-analysis
+spec:
+  workspaces:
+    - name: output
+    - name: sonarqube-auth
+      optional: true
+  params:
+    - name: WORK_DIRECTORY
+      description: Directory to start build in (handle multiple branches)
+      type: string
+    - name: APPLICATION_NAME
+      description: Name of the application
+      type: string
+  steps:
+  - name: sonar-scan
+    workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+    image: registry.redhat.io/ubi9/python-311@sha256:fc669a67a0ef9016c3376b2851050580b3519affd5ec645d629fd52d2a8b8e4a
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      python3 -m pip install pysonar-scanner
+      pysonar-scanner -Dsonar.host.url=http://sonarqube:9000 -Dsonar.projectKey=$(params.APPLICATION_NAME) -Dsonar.login=$(cat $(workspaces.sonarqube-auth.path)/username) -Dsonar.password=$(cat $(workspaces.sonarqube-auth.path)/password)
+
+{{- end }}

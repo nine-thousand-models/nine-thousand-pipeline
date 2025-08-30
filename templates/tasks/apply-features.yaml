@@ -1,0 +1,25 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: apply-features
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: WORK_DIRECTORY
+      description: Directory to apply feature in (handle multiple branches)
+      type: string
+  steps:
+  - name: apply-features
+    workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+    image: image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/s2i-generic-data-science-notebook:2024.2
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      pip install -r requirements.txt
+      cd feature_repo/
+      feast apply
+    envFrom:
+      - secretRef:
+          name: aws-connection-data

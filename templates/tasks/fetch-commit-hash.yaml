@@ -1,0 +1,26 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: fetch-commit-hash
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: APPLICATION_NAME
+      description: Name of the application
+      type: string
+    - name: WORK_DIRECTORY
+      description: Directory to start build in (handle multiple branches)
+      type: string
+  results:
+    - name: GIT_SHORT_REVISION
+      description: Short commit hash of the Git repository
+  steps:
+    - name: fetch-commmit-hash
+      workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+      image: quay.io/redhat-cop/ubi8-git:latest
+      script: |
+        #!/bin/sh
+        git config --global --add safe.directory $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+        echo -n `git rev-parse --short HEAD` | tee $(results.GIT_SHORT_REVISION.path);

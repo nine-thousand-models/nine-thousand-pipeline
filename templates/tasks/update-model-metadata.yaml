@@ -1,0 +1,78 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: update-model-metadata
+spec:
+  params:
+    - name: APPLICATION_NAME
+      description: Name of the application
+      type: string
+    - name: PROJECT_NAME
+      description: MLOps environment name :)
+      type: string
+    - name: VERSION
+      description: Version of the application
+      type: string
+    - name: KFP_RUN_ID
+      description: Run ID of the Data Science Pipeline
+      type: string
+    - name: DEPLOY_ENVIRONMENT
+      description: Environment to deploy the app
+      type: string
+    - name: GIT_COMMIT_AUTHOR
+      description: Author of the git commit
+  steps:
+    - name: update-model-metadata
+      image: registry.redhat.io/ubi9/python-311@sha256:fc669a67a0ef9016c3376b2851050580b3519affd5ec645d629fd52d2a8b8e4a
+      command: ["/bin/sh", "-c"]
+      args:
+      - |
+        python3 -m pip install model-registry=="0.2.10"
+        cat << 'EOF' | python3
+
+        from os import environ
+        from model_registry import ModelRegistry 
+
+        namespace_file_path =\
+          '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
+        with open(namespace_file_path, 'r') as namespace_file:
+          namespace = namespace_file.read()
+        
+        namespace = namespace.split("-")[0]+"-prod"
+
+        environ["KF_PIPELINES_SA_TOKEN_PATH"] = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  
+        registry = ModelRegistry(server_address=f"https://{namespace}-registry-rest.{{ .Values.cluster_domain }}", port=443, author="$(params.GIT_COMMIT_AUTHOR)", is_secure=False)
+
+        # print the version info of registered model
+        version = registry.get_model_version("$(params.APPLICATION_NAME)", "$(params.VERSION)")
+        print("Model Version:", version, "with ID", version.id)
+
+        # Add metadata
+        version.custom_properties["pipeline_run_id"] = "$(params.KFP_RUN_ID)"
+        registry.update(version)
+
+        # Add label
+        for version in registry.get_model_versions("$(params.APPLICATION_NAME)"):
+          if version.name != "$(params.VERSION)" and "$(params.DEPLOY_ENVIRONMENT)" in version.custom_properties.keys():
+              version.custom_properties.pop("$(params.DEPLOY_ENVIRONMENT)")
+              registry.update(version)
+              print("Removed label from $(params.VERSION)")
+          elif version.name == "$(params.VERSION)":
+              version.custom_properties["$(params.DEPLOY_ENVIRONMENT)"]=""
+              version.author = "$(params.GIT_COMMIT_AUTHOR)"
+              registry.update(version)
+              print("Added label to $(params.VERSION)")
+
+        # Update Model URI
+        model = registry.get_model_artifact("$(params.APPLICATION_NAME)","$(params.VERSION)")
+        model.uri = "oci://image-registry.openshift-image-registry.svc:5000/$(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME):$(params.VERSION)"
+        registry.update(model)
+
+        # print all metadata
+
+        version = registry.get_model_version("$(params.APPLICATION_NAME)", "$(params.VERSION)")
+        print("Author:", version.author, "\nMetadata:", version.custom_properties)
+
+        EOF
