@@ -1,0 +1,42 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1	
+kind: TriggerTemplate
+metadata:
+  name: kfp-deploy-github-trigger-template
+spec:
+  params:
+    - name: gitrepositoryurl
+      description: The git repository url
+    - name: git-repo-name
+      description: The name of the repository
+    - name: git-branch
+      description: The git branch name
+    - name: git-short-revision
+      description: Seven character git sha
+    - name: git-commit-author
+      description: Author of the git commit
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: kfp-deploy-pipeline-
+      spec:
+        pipelineRef:
+          name: kfp-deploy-pipeline
+        workspaces:
+          - name: shared-workspace
+            persistentVolumeClaim:
+              claimName: shared-workspace
+        params:
+          - name: GIT_URL
+            value: $(tt.params.gitrepositoryurl)
+          - name: GIT_BRANCH
+            value: $(tt.params.git-branch)
+          - name: MODEL_NAME
+            value: "parts-predictor"
+          - name: VERSION
+            value: $(tt.params.git-short-revision)
+          - name: CLUSTER_DOMAIN
+            value: "{{ .Values.cluster_domain }}"
+          - name: MODEL_STORAGE_PVC
+            value: "parts-model-pvc"

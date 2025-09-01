@@ -1,0 +1,44 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: check-pipeline-version
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: MODEL_NAME
+      description: Name of the model pipeline
+      type: string
+    - name: WORK_DIRECTORY
+      description: Directory containing the version file
+      type: string
+  steps:
+    - name: check-existing-cr
+      workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+      image: registry.redhat.io/openshift4/ose-cli:latest
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          set -e
+          
+          MODEL_NAME="$(params.MODEL_NAME)"
+          
+          # Read version from file
+          if [ -f "version" ]; then
+            VERSION=$(cat version | tr -d '\n')
+            echo "Read version from file: ${VERSION}"
+          else
+            echo "ERROR: version file not found"
+            exit 1
+          fi
+          
+          echo "Checking if PipelineVersion CR exists for ${MODEL_NAME} version ${VERSION}"
+          
+          # Check if PipelineVersion CR exists
+          if oc get pipelineversion "${MODEL_NAME}-${VERSION}" -n data-science-pipelines 2>/dev/null; then
+            echo "ERROR: PipelineVersion CR ${MODEL_NAME}-${VERSION} already exists"
+            exit 1
+          else
+            echo "PipelineVersion CR ${MODEL_NAME}-${VERSION} does not exist, proceeding..."
+          fi

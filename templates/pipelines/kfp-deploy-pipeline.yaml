@@ -1,0 +1,112 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: kfp-deploy-pipeline
+spec:
+  workspaces:
+    - name: shared-workspace
+  params:
+    - name: GIT_URL
+      type: string
+      description: Git repository URL
+    - name: GIT_BRANCH
+      type: string
+      default: "main"
+      description: Git branch to clone
+    - name: MODEL_NAME
+      type: string
+      description: Name of the model pipeline
+    - name: VERSION
+      type: string
+      description: Version of the pipeline
+    - name: CLUSTER_DOMAIN
+      type: string
+      description: Cluster domain for kubeflow endpoint
+    - name: MODEL_STORAGE_PVC
+      type: string
+      description: PVC name for model storage
+  tasks:
+    # Clone the repository containing the pipeline code
+    - name: fetch-pipeline-repository
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: URL
+          value: "$(params.GIT_URL)"
+        - name: REVISION
+          value: "$(params.GIT_BRANCH)"
+        - name: SUBDIRECTORY
+          value: "pipeline-source"
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: SSL_VERIFY
+          value: "false"
+
+    # Check if PipelineVersion CR already exists
+    - name: check-pipeline-version
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      taskRef:
+        name: check-pipeline-version
+        kind: Task
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: VERSION
+          value: "$(params.VERSION)"
+        - name: WORK_DIRECTORY
+          value: "pipeline-source/parts-pipeline"
+      runAfter:
+        - fetch-pipeline-repository
+
+    # Compile the pipeline
+    - name: compile-pipeline
+      taskRef:
+        name: compile-kfp-pipeline
+        kind: Task
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: VERSION
+          value: "$(params.VERSION)"
+        - name: CLUSTER_DOMAIN
+          value: "$(params.CLUSTER_DOMAIN)"
+        - name: MODEL_STORAGE_PVC
+          value: "$(params.MODEL_STORAGE_PVC)"
+        - name: WORK_DIRECTORY
+          value: "pipeline-source/parts-pipeline"
+      runAfter:
+        - check-pipeline-version
+
+    # Create PipelineVersion CR
+    - name: create-pipeline-version-cr
+      taskRef:
+        name: create-pipeline-version-cr
+        kind: Task
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: VERSION
+          value: "$(params.VERSION)"
+        - name: WORK_DIRECTORY
+          value: "pipeline-source/parts-pipeline"
+      runAfter:
+        - compile-pipeline

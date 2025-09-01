@@ -221,26 +221,26 @@ spec:
   #       - name: PROJECT_NAME
   #         value: {{ .Values.USER_NAME }}
           
-  #   # update model metadata
-  #   - name: update-model-metadata
-  #     taskRef:
-  #       name: update-model-metadata
-  #       kind: Task
-  #     runAfter:
-  #       - deploy-test
-  #     params:
-  #       - name: APPLICATION_NAME
-  #         value: "$(params.APPLICATION_NAME)"
-  #       - name: VERSION
-  #         value: "$(params.GIT_SHORT_REVISION)"
-  #       - name: DEPLOY_ENVIRONMENT
-  #         value: "test"
-  #       - name: PROJECT_NAME
-  #         value: {{ .Values.USER_NAME }}
-  #       - name: KFP_RUN_ID
-  #         value: "$(tasks.execute-ds-pipeline.results.KFP_RUN_ID)"
-  #       - name: GIT_COMMIT_AUTHOR
-  #         value: "$(params.GIT_COMMIT_AUTHOR)"
+    # update model metadata
+    - name: update-model-metadata
+      taskRef:
+        name: update-model-metadata
+        kind: Task
+      runAfter:
+        - build-modelcar
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: VERSION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: DEPLOY_ENVIRONMENT
+          value: "test"
+        - name: PROJECT_NAME
+          value: {{ .Values.USER_NAME }}
+        - name: KFP_RUN_ID
+          value: "$(tasks.execute-ds-pipeline.results.KFP_RUN_ID)"
+        - name: GIT_COMMIT_AUTHOR
+          value: "$(params.GIT_COMMIT_AUTHOR)"
 
   #   # Raise a PR for prod
   #   - name: raise-pr-for-prod
