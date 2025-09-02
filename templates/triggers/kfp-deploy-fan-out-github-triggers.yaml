@@ -1,0 +1,47 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1 
+kind: Trigger 
+metadata:
+  name: kfp-deploy-fan-out-github-trigger 
+spec:
+  interceptors:
+     - ref:
+         name: "cel" 
+       params:
+        - name: filter
+          value: (body.ref.split('/')[2] == 'main')
+        - name: overlays
+          value:
+          - expression: body.head_commit.id.truncate(10)
+            key: truncated_sha
+          - expression: body.ref.split('/')[2]
+            key: branch_name
+          - expression: body.repository.name
+            key: repo_name
+          - expression: body.pusher.name
+            key: commit_author
+          - expression: body.head_commit.added.join(',')
+            key: added_files
+          - expression: body.head_commit.removed.join(',')
+            key: removed_files
+          - expression: body.head_commit.modified.join(',')
+            key: modified_files
+  bindings:
+    - name: git-branch
+      value: $(extensions.branch_name)
+    - name: git-short-revision
+      value: $(extensions.truncated_sha)
+    - name: gitrepositoryurl
+      value: $(body.repository.clone_url)
+    - name: git-repo-name
+      value: $(body.repository.name)
+    - name: git-commit-author
+      value: $(body.pusher.name)
+    - name: added-files
+      value: $(extensions.added_files)
+    - name: removed-files
+      value: $(extensions.removed_files)
+    - name: modified-files
+      value: $(extensions.modified_files)
+  template: 
+     ref: kfp-deploy-fan-out-github-trigger-template

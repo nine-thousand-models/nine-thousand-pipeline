@@ -23,6 +23,10 @@ spec:
     - name: CLUSTER_DOMAIN
       type: string
       description: Cluster domain for kubeflow endpoint
+    - name: FOLDER
+      type: string
+      default: "."
+      description: Specific pipeline folder to deploy
   tasks:
     # Clone the repository containing the pipeline code
     - name: fetch-pipeline-repository
@@ -64,7 +68,7 @@ spec:
         - name: VERSION
           value: "$(params.VERSION)"
         - name: WORK_DIRECTORY
-          value: "pipeline-source/parts-pipeline"
+          value: "pipeline-source/$(params.FOLDER)"
       runAfter:
         - fetch-pipeline-repository
 
@@ -84,7 +88,7 @@ spec:
         - name: CLUSTER_DOMAIN
           value: "$(params.CLUSTER_DOMAIN)"
         - name: WORK_DIRECTORY
-          value: "pipeline-source/parts-pipeline"
+          value: "pipeline-source/$(params.FOLDER)"
       runAfter:
         - check-pipeline-version
 
@@ -102,6 +106,6 @@ spec:
         - name: VERSION
           value: "$(params.VERSION)"
         - name: WORK_DIRECTORY
-          value: "pipeline-source/parts-pipeline"
+          value: "pipeline-source/$(params.FOLDER)"
       runAfter:
         - compile-pipeline
