@@ -7,7 +7,7 @@ spec:
   workspaces:
     - name: output
   params:
-    - name: APPLICATION_NAME
+    - name: MODEL_NAME
       description: Name of the application
       type: string
     - name: WORK_DIRECTORY
@@ -32,15 +32,32 @@ spec:
       image: quay.io/redhat-cop/tekton-task-helm:3.6.3
       script: |
         #!/bin/sh
+
+        CONFIG_FILE="$(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)/config.yaml"
+        CONFIG_DIR="$(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)"
+
+        # Check if config.yaml exists, create if it doesn't
+        if [[ ! -f "$CONFIG_FILE" ]]; then
+        mkdir -p "$CONFIG_DIR"
+        cat <<EOF > "$CONFIG_FILE"
+        ---
+        chart_path: charts/model-deployment/simple
+        name: $(params.MODEL_NAME)
+        image_repository: image-registry.openshift-image-registry.svc:5000
+        image_namespace: $(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)
+        version: $(params.VERSION)
+        EOF
+        fi
+
         if [[ $(params.DEPLOY_ENVIRONMENT) == "test" ]]; then
-          yq eval -i .version=\"$(params.VERSION)\" "$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME)/config.yaml"
-          yq eval -i .image_repository=\"image-registry.openshift-image-registry.svc:5000\" "$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME)/config.yaml"
-          yq eval -i .image_namespace=\"$(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)\" "$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME)/config.yaml"
+            yq eval -i ".version=\"$(params.VERSION)\"" "$CONFIG_FILE"
+            yq eval -i ".image_repository=\"image-registry.openshift-image-registry.svc:5000\"" "$CONFIG_FILE"
+            yq eval -i ".image_namespace=\"$(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)\"" "$CONFIG_FILE"
         elif [[ $(params.DEPLOY_ENVIRONMENT) == "prod" ]]; then
-          git checkout -b $(params.APPLICATION_NAME)-$(params.VERSION)
-          yq eval -i .version=\"$(params.VERSION)\" "$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME)/config.yaml"
-          yq eval -i .image_repository=\"image-registry.openshift-image-registry.svc:5000\" "$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME)/config.yaml"
-          yq eval -i .image_namespace=\"$(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)\" "$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME)/config.yaml"
+            git checkout -b $(params.MODEL_NAME)-$(params.VERSION)
+            yq eval -i ".version=\"$(params.VERSION)\"" "$CONFIG_FILE"
+            yq eval -i ".image_repository=\"image-registry.openshift-image-registry.svc:5000\"" "$CONFIG_FILE"
+            yq eval -i ".image_namespace=\"$(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)\"" "$CONFIG_FILE"
         fi
 
     - name: commit-changes
@@ -54,26 +71,31 @@ spec:
           git config --global user.name "🐈 Tekton 🐈"
           git config --global push.default simple
           git config --global --add safe.directory '*'
-          git add $(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME)/config.yaml
-          git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.APPLICATION_NAME) for version $(params.VERSION) 🚀" || rc=$?
-          git remote set-url origin $(cat $HOME/.git-credentials)/$(params.PROJECT_NAME)/mlops-gitops.git
+          git add $(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)/config.yaml
+          git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || rc=$?
+          git remote set-url origin $(cat $HOME/.git-credentials)/ckavili/nine-thousand-models-gitops.git
+          echo "🫡 reading config file for testing"
+          echo "....."
+          cat $(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)/config.yaml
+          echo "I will push things at some point"
           git push origin HEAD:main
+          echo "🫡push completed"
         elif [[ $(params.DEPLOY_ENVIRONMENT) == "prod" ]]; then
           git config --global user.email "tekton@mlops.bot.com"
           git config --global user.name "🐈 Tekton 🐈"
           git config --global push.default simple
           git config --global --add safe.directory '*'
-          git add prod/$(params.APPLICATION_NAME)/config.yaml
-          git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.APPLICATION_NAME) for version $(params.VERSION) 🚀" || rc=$?
-          git remote set-url origin $(cat $HOME/.git-credentials)/$(params.PROJECT_NAME)/mlops-gitops.git
-          git push origin $(params.APPLICATION_NAME)-$(params.VERSION)
+          git add prod/$(params.MODEL_NAME)/config.yaml
+          git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || rc=$?
+          git remote set-url origin $(cat $HOME/.git-credentials)/ckavili/nine-thousand-models-gitops.git
+          git push origin $(params.MODEL_NAME)-$(params.VERSION)
           curl --location 'https://gitea-gitea.{{ .Values.cluster_domain }}/api/v1/repos/{{ .Values.USER_NAME }}/mlops-gitops/pulls' --user 'opentlc-mgr:myPassw0rd' --header 'accept: application/json' --header 'Content-Type: application/json' \
             --data '{
                 "assignee": "{{ .Values.USER_NAME }}",
                 "base": "main",
                 "body": "Experiment results can be found in [Model Registry](https://rhods-dashboard-redhat-ods-applications.{{ .Values.cluster_domain }}/modelRegistry/{{ .Values.USER_NAME }}-prod-registry/).",
-                "head": "$(params.APPLICATION_NAME)-$(params.VERSION)",
-                "title": "🤖 Model $(params.APPLICATION_NAME):$(params.VERSION) Deployment"
+                "head": "$(params.MODEL_NAME)-$(params.VERSION)",
+                "title": "🤖 Model $(params.MODEL_NAME):$(params.VERSION) Deployment"
             }'
 
             echo "☘️ A pull request is raised for prod: https://gitea-gitea.{{ .Values.cluster_domain }}/{{ .Values.USER_NAME }}/mlops-gitops/pulls/"
