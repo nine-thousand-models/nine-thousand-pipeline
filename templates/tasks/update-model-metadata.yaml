@@ -5,7 +5,7 @@ metadata:
   name: update-model-metadata
 spec:
   params:
-    - name: APPLICATION_NAME
+    - name: MODEL_NAME
       description: Name of the application
       type: string
     - name: PROJECT_NAME
@@ -46,7 +46,7 @@ spec:
         registry = ModelRegistry(server_address=f"https://{namespace}-registry-rest.{{ .Values.cluster_domain }}", port=443, author="$(params.GIT_COMMIT_AUTHOR)", is_secure=False)
 
         # print the version info of registered model
-        version = registry.get_model_version("$(params.APPLICATION_NAME)", "$(params.VERSION)")
+        version = registry.get_model_version("$(params.MODEL_NAME)", "$(params.VERSION)")
         print("Model Version:", version, "with ID", version.id)
 
         # Add metadata
@@ -54,7 +54,7 @@ spec:
         registry.update(version)
 
         # Add label
-        for version in registry.get_model_versions("$(params.APPLICATION_NAME)"):
+        for version in registry.get_model_versions("$(params.MODEL_NAME)"):
           if version.name != "$(params.VERSION)" and "$(params.DEPLOY_ENVIRONMENT)" in version.custom_properties.keys():
               version.custom_properties.pop("$(params.DEPLOY_ENVIRONMENT)")
               registry.update(version)
@@ -66,13 +66,13 @@ spec:
               print("Added label to $(params.VERSION)")
 
         # Update Model URI
-        model = registry.get_model_artifact("$(params.APPLICATION_NAME)","$(params.VERSION)")
-        model.uri = "oci://image-registry.openshift-image-registry.svc:5000/$(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME):$(params.VERSION)"
+        model = registry.get_model_artifact("$(params.MODEL_NAME)","$(params.VERSION)")
+        model.uri = "oci://image-registry.openshift-image-registry.svc:5000/$(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME):$(params.VERSION)"
         registry.update(model)
 
         # print all metadata
 
-        version = registry.get_model_version("$(params.APPLICATION_NAME)", "$(params.VERSION)")
+        version = registry.get_model_version("$(params.MODEL_NAME)", "$(params.VERSION)")
         print("Author:", version.author, "\nMetadata:", version.custom_properties)
 
         EOF

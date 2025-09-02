@@ -1,0 +1,80 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: compile-kfp-pipeline
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: MODEL_NAME
+      description: Name of the model
+      type: string
+    - name: CLUSTER_DOMAIN
+      description: Cluster domain for kubeflow endpoint
+      type: string
+    - name: MODEL_STORAGE_PVC
+      description: PVC name for model storage
+      type: string
+    - name: WORK_DIRECTORY
+      description: Directory to work in
+      type: string
+  steps:
+    - name: compile-pipeline
+      workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+      image: registry.redhat.io/ubi9/python-311@sha256:fc669a67a0ef9016c3376b2851050580b3519affd5ec645d629fd52d2a8b8e4a
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          # Read version from file
+          if [ -f "version" ]; then
+            VERSION=$(cat version | tr -d '\n')
+            echo "Read version from file: ${VERSION}"
+          else
+            echo "ERROR: version file not found"
+            exit 1
+          fi
+          
+          echo "Compiling KFP pipeline for model: $(params.MODEL_NAME) version: ${VERSION}"
+          echo "Working directory: $(workspaces.output.path)/$(params.WORK_DIRECTORY)"
+          ls -la
+          
+          # Install required dependencies
+          python3 -m pip install kfp==2.9.0 kfp-kubernetes==1.3.0
+          
+          # Update metadata in the pipeline script
+          cat > compile_pipeline.py << EOF
+          import kfp
+          from prod_train_save_pipeline import training_pipeline
+          
+          metadata = {
+              "hyperparameters": {
+                  "epochs": 2
+              },
+              "model_name": "$(params.MODEL_NAME)",
+              "version": "${VERSION}",
+              "cluster_domain": "$(params.CLUSTER_DOMAIN)",
+              "model_storage_pvc": "$(params.MODEL_STORAGE_PVC)",
+              "prod_flag": True
+          }
+          
+          print(f"Compiling pipeline with metadata: {metadata}")
+          kfp.compiler.Compiler().compile(
+              training_pipeline, 
+              'parts-pipeline.yaml', 
+              pipeline_parameters=metadata
+          )
+          print("Pipeline compiled successfully to parts-pipeline.yaml")
+          EOF
+          
+          # Execute the compilation
+          python3 compile_pipeline.py
+          
+          # Verify the compiled file exists
+          if [ -f "parts-pipeline.yaml" ]; then
+            echo "Pipeline compilation successful"
+            ls -la parts-pipeline.yaml
+          else
+            echo "ERROR: Pipeline compilation failed - parts-pipeline.yaml not found"
+            exit 1
+          fi

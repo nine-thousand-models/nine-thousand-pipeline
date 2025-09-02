@@ -1,0 +1,58 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: create-pipeline-version-cr
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: MODEL_NAME
+      description: Name of the model pipeline
+      type: string
+    - name: WORK_DIRECTORY
+      description: Directory to work in
+      type: string
+  steps:
+    - name: create-cr
+      workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+      image: registry.redhat.io/openshift4/ose-cli:latest
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          set -e
+          
+          MODEL_NAME="$(params.MODEL_NAME)"
+          
+          # Read version from file
+          if [ -f "version" ]; then
+            VERSION=$(cat version | tr -d '\n')
+            echo "Read version from file: ${VERSION}"
+          else
+            echo "ERROR: version file not found"
+            exit 1
+          fi
+          
+          echo "Creating PipelineVersion CR for ${MODEL_NAME} version ${VERSION}"
+          
+          # Verify compiled pipeline exists
+          if [ ! -f "parts-pipeline.yaml" ]; then
+            echo "ERROR: Compiled pipeline parts-pipeline.yaml not found"
+            exit 1
+          fi
+          
+          # Create PipelineVersion CR
+          cat <<EOF | oc apply -f -
+          apiVersion: datasciencepipelinesapplications.opendatahub.io/v1alpha1
+          kind: PipelineVersion
+          metadata:
+            name: ${MODEL_NAME}-${VERSION}
+            namespace: data-science-pipelines
+          spec:
+            pipelineId: ${MODEL_NAME}
+            pipelineVersionId: ${VERSION}
+            pipelineSpec: |
+          $(cat parts-pipeline.yaml | sed 's/^/      /')
+          EOF
+          
+          echo "PipelineVersion CR ${MODEL_NAME}-${VERSION} created successfully"
