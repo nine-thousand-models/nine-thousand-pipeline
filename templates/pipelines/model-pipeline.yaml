@@ -171,76 +171,76 @@ spec:
   #         value: "$(params.APPLICATION_NAME)/$(params.GIT_BRANCH)"
   #   {{- end }}
 
-  #   # Fetch GitOps repository
-  #   - name: fetch-gitops-repository
-  #     taskRef:
-  #       resolver: cluster
-  #       params:
-  #         - name: kind
-  #           value: task
-  #         - name: name
-  #           value: git-clone
-  #         - name: namespace
-  #           value: openshift-pipelines 
-  #     workspaces:
-  #       - name: output
-  #         workspace: shared-workspace
-  #     params:
-  #       - name: URL
-  #         value: "https://gitea-gitea.{{ .Values.cluster_domain }}/{{ .Values.USER_NAME }}/mlops-gitops.git"
-  #       - name: REVISION
-  #         value: "main"
-  #       - name: SUBDIRECTORY
-  #         value: "mlops-gitops/main"
-  #       - name: DELETE_EXISTING
-  #         value: "true"
-  #       - name: SSL_VERIFY
-  #         value: "false"
-  #     runAfter:
-  #       - build-modelcar
-
-  #   # Update model version in Git
-  #   - name: deploy-test
-  #     taskRef:
-  #       name: deploy-or-raise-pr
-  #       kind: Task
-  #     runAfter:
-  #       - fetch-gitops-repository
-  #     workspaces:
-  #       - name: output
-  #         workspace: shared-workspace
-  #     params:
-  #       - name: APPLICATION_NAME
-  #         value: "$(params.APPLICATION_NAME)"
-  #       - name: VERSION
-  #         value: "$(params.GIT_SHORT_REVISION)"
-  #       - name: WORK_DIRECTORY
-  #         value: "mlops-gitops/main/model-deployments/"
-  #       - name: DEPLOY_ENVIRONMENT
-  #         value: "test"
-  #       - name: PROJECT_NAME
-  #         value: {{ .Values.USER_NAME }}
-          
-    # update model metadata
-    - name: update-model-metadata
+    # Fetch GitOps repository
+    - name: fetch-gitops-repository
       taskRef:
-        name: update-model-metadata
-        kind: Task
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines 
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: URL
+          value: "https://github.com/ckavili/nine-thousand-models-gitops.git"
+        - name: REVISION
+          value: "main"
+        - name: SUBDIRECTORY
+          value: "nine-thousand-models-gitops/main/$(params.MODEL_NAME)/"
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: SSL_VERIFY
+          value: "false"
       runAfter:
         - build-modelcar
+
+    # Update model version in Git
+    - name: deploy-test
+      taskRef:
+        name: deploy-or-raise-pr
+        kind: Task
+      runAfter:
+        - fetch-gitops-repository
+      workspaces:
+        - name: output
+          workspace: shared-workspace
       params:
         - name: MODEL_NAME
           value: "$(params.MODEL_NAME)"
         - name: VERSION
           value: "$(params.GIT_SHORT_REVISION)"
+        - name: WORK_DIRECTORY
+          value: "nine-thousand-models-gitops/main/$(params.MODEL_NAME)/"
         - name: DEPLOY_ENVIRONMENT
           value: "test"
         - name: PROJECT_NAME
-          value: {{ .Values.USER_NAME }}
-        - name: KFP_RUN_ID
-          value: "$(tasks.execute-ds-pipeline.results.KFP_RUN_ID)"
-        - name: GIT_COMMIT_AUTHOR
-          value: "$(params.GIT_COMMIT_AUTHOR)"
+          value: "fika"
+          
+    # # update model metadata
+    # - name: update-model-metadata
+    #   taskRef:
+    #     name: update-model-metadata
+    #     kind: Task
+    #   runAfter:
+    #     - build-modelcar
+    #   params:
+    #     - name: MODEL_NAME
+    #       value: "$(params.MODEL_NAME)"
+    #     - name: VERSION
+    #       value: "$(params.GIT_SHORT_REVISION)"
+    #     - name: DEPLOY_ENVIRONMENT
+    #       value: "test"
+    #     - name: PROJECT_NAME
+    #       value: "fika"
+    #     - name: KFP_RUN_ID
+    #       value: "$(tasks.execute-ds-pipeline.results.KFP_RUN_ID)"
+    #     - name: GIT_COMMIT_AUTHOR
+    #       value: "$(params.GIT_COMMIT_AUTHOR)"
 
   #   # Raise a PR for prod
   #   - name: raise-pr-for-prod

@@ -23,14 +23,14 @@ spec:
       script: |
         #!/bin/sh
         echo "Creating Dockerfile for model: $(params.MODEL_NAME).onnx"
-        cat <<EOF > Dockerfile
-        FROM registry.access.redhat.com/ubi9/ubi-minimal:9.4
-        WORKDIR /models/1
-        RUN mkdir -p /models/1/artifacts
-        COPY $(params.MODEL_NAME).onnx .
-        COPY artifacts/ artifacts/
-        USER 1001
-        EOF
+        # cat <<EOF > Dockerfile
+        # FROM registry.access.redhat.com/ubi9/ubi-minimal:9.4
+        # WORKDIR /models/1
+        # RUN mkdir -p /models/1/artifacts
+        # COPY $(params.MODEL_NAME).onnx .
+        # COPY artifacts/ artifacts/
+        # USER 1001
+        # EOF
     - name: openshift-build
       workingDir: $(workspaces.output.path)
       image: quay.io/openshift/origin-cli:4.14
