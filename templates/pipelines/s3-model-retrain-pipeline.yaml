@@ -1,0 +1,72 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: s3-model-retrain-pipeline
+spec:
+  workspaces:
+    - name: shared-workspace
+    - name: model-specs-workspace
+  params:
+    - name: S3_BUCKET
+      type: string
+      description: S3 bucket name where data changed
+    - name: S3_OBJECT_KEY
+      type: string
+      description: S3 object key that changed
+    - name: S3_EVENT_NAME
+      type: string
+      description: S3 event name
+    - name: GIT_URL
+      type: string
+      description: Git repository containing model specs
+    - name: GIT_BRANCH
+      type: string
+      default: "main"
+      description: Git branch for model specs
+  tasks:
+    # Clone model specifications repository
+    - name: fetch-model-specs
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: model-specs-workspace
+      params:
+        - name: URL
+          value: "$(params.GIT_URL)"
+        - name: REVISION
+          value: "$(params.GIT_BRANCH)"
+        - name: SUBDIRECTORY
+          value: "model-specs"
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: SSL_VERIFY
+          value: "false"
+
+    # Lookup which models need retraining based on S3 change
+    - name: s3-model-lookup
+      taskRef:
+        name: s3-model-lookup-task
+        kind: Task
+      workspaces:
+        - name: model-specs
+          workspace: model-specs-workspace
+      params:
+        - name: S3_BUCKET
+          value: "$(params.S3_BUCKET)"
+        - name: S3_OBJECT_KEY
+          value: "$(params.S3_OBJECT_KEY)"
+        - name: TARGET_PIPELINE
+          value: "ct-pipeline"
+        - name: GIT_URL
+          value: "$(params.GIT_URL)"
+      runAfter:
+        - fetch-model-specs

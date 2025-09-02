@@ -2,19 +2,19 @@
 apiVersion: triggers.tekton.dev/v1beta1
 kind: EventListener
 metadata:
-  name: kfp-deploy-listener
+  name: s3-model-retrain-listener
 spec:
   triggers:
-    - triggerRef: kfp-deploy-github-trigger
+    - triggerRef: s3-model-retrain-trigger
 ---
 kind: Route
 apiVersion: route.openshift.io/v1
 metadata:
-  name: el-kfp-deploy-listener
+  name: el-s3-model-retrain-listener
 spec:
   to:
     kind: Service
-    name: el-kfp-deploy-listener
+    name: el-s3-model-retrain-listener
     weight: 100
   port:
     targetPort: http-listener
