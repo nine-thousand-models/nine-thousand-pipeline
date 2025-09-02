@@ -44,22 +44,15 @@ spec:
     - name: process-files
       image: registry.redhat.io/openshift4/ose-cli:latest
       script: |
-        #!/bin/bash
+        #!/bin/sh
+        # set -euo pipefail
 
         curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/pipeline/latest/tkn-linux-amd64.tar.gz | tar --no-same-owner -xzf - -C /tmp tkn 
         chmod -R 755 /tmp/tkn
 
-        set -euo pipefail
-
         echo "Added files: $(params.ADDED_FILES)"
         echo "Removed files: $(params.REMOVED_FILES)"
         echo "Modified files: $(params.MODIFIED_FILES)"
-
-        echo "Git URL: $(params.GIT_URL)"
-        echo "Git Repo Name: $(params.GIT_REPO_NAME)"
-        echo "Git Branch: $(params.GIT_BRANCH)"
-        echo "Git Short Revision: $(params.GIT_SHORT_REVISION)"
-        echo "Git Commit Author: $(params.GIT_COMMIT_AUTHOR)"
 
         # Combine ADDED + MODIFIED into one list, split by comma, deduplicate
         all_files=$(echo "$(params.ADDED_FILES),$(params.MODIFIED_FILES)" | tr ',' '\n' | sed '/^$/d' | sort -u)
@@ -67,22 +60,59 @@ spec:
         echo "Final unique files:"
         echo "$all_files"
 
-        # Trigger a pipeline for each file in background (parallel)
         for f in $all_files; do
-          echo "Triggering pipeline $(params.TARGET_PIPELINE) for file: $f"
-          model_name="${f%.json}"
-          /tmp/tkn pipeline start $(params.TARGET_PIPELINE) --prefix-name ${model_name} \
-            -p GIT_URL="$(params.GIT_URL)" \
-            -p PROJECT_NAME="fika" \
-            -p GIT_REPO_NAME="$(params.GIT_REPO_NAME)" \
-            -p GIT_BRANCH="$(params.GIT_BRANCH)" \
-            -p GIT_SHORT_REVISION="$(params.GIT_SHORT_REVISION)" \
-            -p GIT_COMMIT_AUTHOR="$(params.GIT_COMMIT_AUTHOR)" \
-            -p MODEL_NAME="$model_name" \
-            --workspace name=shared-workspace,claimName=shared-workspace \
-            --workspace name=model-workspace,claimName=model-pvc \
-            --showlog &
+        echo "Triggering pipeline $(params.TARGET_PIPELINE) for file: $f"
+        model_name="${f%.json}"
+
+        shared_pvc_name="${model_name}-pvc"
+        model_pvc_name="${model_name}-model"
+
+        # Create shared PVC manifest
+        cat <<EOF > /tmp/${shared_pvc_name}.yaml
+        ---
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: ${shared_pvc_name}
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+        EOF
+
+        # Create model PVC manifest
+        cat <<EOF > /tmp/${model_pvc_name}.yaml
+        ---
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: ${model_pvc_name}
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+        EOF
+
+        # Apply manifests (idempotent)
+        oc apply -f /tmp/${shared_pvc_name}.yaml || rc=$?
+        oc apply -f /tmp/${model_pvc_name}.yaml || rc=$?
+
+        # Trigger pipeline
+        /tmp/tkn pipeline start $(params.TARGET_PIPELINE) --prefix-name ${model_name} \
+          -p GIT_URL="$(params.GIT_URL)" \
+          -p PROJECT_NAME="fika" \
+          -p GIT_REPO_NAME="$(params.GIT_REPO_NAME)" \
+          -p GIT_BRANCH="$(params.GIT_BRANCH)" \
+          -p GIT_SHORT_REVISION="$(params.GIT_SHORT_REVISION)" \
+          -p GIT_COMMIT_AUTHOR="$(params.GIT_COMMIT_AUTHOR)" \
+          -p MODEL_NAME="$model_name" \
+          --workspace name=shared-workspace,claimName=$shared_pvc_name \
+          --workspace name=model-workspace,claimName=$model_pvc_name \
+          --showlog &
         done
 
-        # Wait for all background jobs
         wait
