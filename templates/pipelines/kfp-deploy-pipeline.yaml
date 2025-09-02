@@ -14,7 +14,7 @@ spec:
       type: string
       default: "main"
       description: Git branch to clone
-    - name: MODEL_NAME
+    - name: PIPELINE_NAME
       type: string
       description: Name of the model pipeline
     - name: VERSION
@@ -23,9 +23,6 @@ spec:
     - name: CLUSTER_DOMAIN
       type: string
       description: Cluster domain for kubeflow endpoint
-    - name: MODEL_STORAGE_PVC
-      type: string
-      description: PVC name for model storage
   tasks:
     # Clone the repository containing the pipeline code
     - name: fetch-pipeline-repository
@@ -62,8 +59,8 @@ spec:
         name: check-pipeline-version
         kind: Task
       params:
-        - name: MODEL_NAME
-          value: "$(params.MODEL_NAME)"
+        - name: PIPELINE_NAME
+          value: "$(params.PIPELINE_NAME)"
         - name: VERSION
           value: "$(params.VERSION)"
         - name: WORK_DIRECTORY
@@ -80,14 +77,12 @@ spec:
         - name: output
           workspace: shared-workspace
       params:
-        - name: MODEL_NAME
-          value: "$(params.MODEL_NAME)"
+        - name: PIPELINE_NAME
+          value: "$(params.PIPELINE_NAME)"
         - name: VERSION
           value: "$(params.VERSION)"
         - name: CLUSTER_DOMAIN
           value: "$(params.CLUSTER_DOMAIN)"
-        - name: MODEL_STORAGE_PVC
-          value: "$(params.MODEL_STORAGE_PVC)"
         - name: WORK_DIRECTORY
           value: "pipeline-source/parts-pipeline"
       runAfter:
@@ -102,8 +97,8 @@ spec:
         - name: output
           workspace: shared-workspace
       params:
-        - name: MODEL_NAME
-          value: "$(params.MODEL_NAME)"
+        - name: PIPELINE_NAME
+          value: "$(params.PIPELINE_NAME)"
         - name: VERSION
           value: "$(params.VERSION)"
         - name: WORK_DIRECTORY

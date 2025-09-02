@@ -7,14 +7,11 @@ spec:
   workspaces:
     - name: output
   params:
-    - name: MODEL_NAME
+    - name: PIPELINE_NAME
       description: Name of the model
       type: string
     - name: CLUSTER_DOMAIN
       description: Cluster domain for kubeflow endpoint
-      type: string
-    - name: MODEL_STORAGE_PVC
-      description: PVC name for model storage
       type: string
     - name: WORK_DIRECTORY
       description: Directory to work in
@@ -35,7 +32,7 @@ spec:
             exit 1
           fi
           
-          echo "Compiling KFP pipeline for model: $(params.MODEL_NAME) version: ${VERSION}"
+          echo "Compiling KFP pipeline for model: $(params.PIPELINE_NAME) version: ${VERSION}"
           echo "Working directory: $(workspaces.output.path)/$(params.WORK_DIRECTORY)"
           ls -la
           
@@ -51,30 +48,30 @@ spec:
               "hyperparameters": {
                   "epochs": 2
               },
-              "model_name": "$(params.MODEL_NAME)",
+              "model_name": "tb_model",
               "version": "${VERSION}",
               "cluster_domain": "$(params.CLUSTER_DOMAIN)",
-              "model_storage_pvc": "$(params.MODEL_STORAGE_PVC)",
+              "model_storage_pvc": "model-pvc",
               "prod_flag": True
           }
           
           print(f"Compiling pipeline with metadata: {metadata}")
           kfp.compiler.Compiler().compile(
               training_pipeline, 
-              'parts-pipeline.yaml', 
+              '$(params.PIPELINE_NAME).yaml', 
               pipeline_parameters=metadata
           )
-          print("Pipeline compiled successfully to parts-pipeline.yaml")
+          print("Pipeline compiled successfully to $(params.PIPELINE_NAME).yaml")
           EOF
           
           # Execute the compilation
           python3 compile_pipeline.py
           
           # Verify the compiled file exists
-          if [ -f "parts-pipeline.yaml" ]; then
+          if [ -f "$(params.PIPELINE_NAME).yaml" ]; then
             echo "Pipeline compilation successful"
-            ls -la parts-pipeline.yaml
+            ls -la $(params.PIPELINE_NAME).yaml
           else
-            echo "ERROR: Pipeline compilation failed - parts-pipeline.yaml not found"
+            echo "ERROR: Pipeline compilation failed - $(params.PIPELINE_NAME).yaml not found"
             exit 1
           fi

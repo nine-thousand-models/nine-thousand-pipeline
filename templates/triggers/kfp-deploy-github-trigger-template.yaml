@@ -32,11 +32,9 @@ spec:
             value: $(tt.params.gitrepositoryurl)
           - name: GIT_BRANCH
             value: $(tt.params.git-branch)
-          - name: MODEL_NAME
-            value: "parts-predictor"
+          - name: PIPELINE_NAME
+            value: "parts-pipeline"
           - name: VERSION
             value: $(tt.params.git-short-revision)
           - name: CLUSTER_DOMAIN
             value: "{{ .Values.cluster_domain }}"
-          - name: MODEL_STORAGE_PVC
-            value: "parts-model-pvc"
