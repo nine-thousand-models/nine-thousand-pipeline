@@ -1,0 +1,64 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: kfp-deploy-fan-out-pipeline
+spec:
+  params:
+    - name: GIT_URL
+      type: string
+      default: ""
+    - name: GIT_REPO_NAME
+      type: string
+      default: ""
+    - name: GIT_SHORT_REVISION
+      type: string
+      default: ""
+    - name: GIT_BRANCH
+      type: string
+      default: "main"
+    - name: GIT_COMMIT_AUTHOR
+      type: string
+      default: ""
+    - name: TARGET_PIPELINE
+      type: string
+      default: "kfp-deploy-pipeline"
+    - name: ADDED_FILES
+      type: string
+      default: ""
+    - name: REMOVED_FILES
+      type: string
+      default: ""
+    - name: MODIFIED_FILES
+      type: string
+      default: ""
+    - name: CLUSTER_DOMAIN
+      type: string
+      description: Cluster domain for kubeflow endpoint
+  tasks:
+    # Fan Out Task to detect changed pipeline folders and trigger individual kfp-deploy-pipeline runs
+    - name: kfp-pipeline-fan-out-task
+      taskRef:
+        name: kfp-pipeline-fan-out-task
+        kind: Task
+      params:
+        - name: ADDED_FILES 
+          value: "$(params.ADDED_FILES)"
+        - name: REMOVED_FILES
+          value: "$(params.REMOVED_FILES)"
+        - name: MODIFIED_FILES
+          value: "$(params.MODIFIED_FILES)"
+        - name: GIT_URL
+          value: "$(params.GIT_URL)"
+        - name: GIT_REPO_NAME
+          value: "$(params.GIT_REPO_NAME)"
+        - name: GIT_BRANCH
+          value: "$(params.GIT_BRANCH)"
+        - name: GIT_SHORT_REVISION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: GIT_COMMIT_AUTHOR
+          value: "$(params.GIT_COMMIT_AUTHOR)"
+        - name: TARGET_PIPELINE
+          value: "$(params.TARGET_PIPELINE)"
+        - name: CLUSTER_DOMAIN
+          value: "$(params.CLUSTER_DOMAIN)"

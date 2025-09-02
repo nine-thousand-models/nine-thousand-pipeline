@@ -7,14 +7,11 @@ spec:
   workspaces:
     - name: output
   params:
-    - name: MODEL_NAME
+    - name: PIPELINE_NAME
       description: Name of the model
       type: string
     - name: CLUSTER_DOMAIN
       description: Cluster domain for kubeflow endpoint
-      type: string
-    - name: MODEL_STORAGE_PVC
-      description: PVC name for model storage
       type: string
     - name: WORK_DIRECTORY
       description: Directory to work in
@@ -35,46 +32,74 @@ spec:
             exit 1
           fi
           
-          echo "Compiling KFP pipeline for model: $(params.MODEL_NAME) version: ${VERSION}"
+          echo "Compiling KFP pipeline for model: $(params.PIPELINE_NAME) version: ${VERSION}"
           echo "Working directory: $(workspaces.output.path)/$(params.WORK_DIRECTORY)"
           ls -la
           
           # Install required dependencies
-          python3 -m pip install kfp==2.9.0 kfp-kubernetes==1.3.0
+          python3 -m pip install kfp==2.9.0 kfp-kubernetes==1.3.0 pyyaml
           
-          # Update metadata in the pipeline script
+          # Create dynamic compilation script
           cat > compile_pipeline.py << EOF
           import kfp
-          from prod_train_save_pipeline import training_pipeline
+          import yaml
+          import importlib
+          import os
           
-          metadata = {
-              "hyperparameters": {
-                  "epochs": 2
-              },
-              "model_name": "$(params.MODEL_NAME)",
+          # Load pipeline configuration
+          config_file = "pipeline_config.yaml"
+          if os.path.exists(config_file):
+              with open(config_file, 'r') as f:
+                  config = yaml.safe_load(f)
+              print(f"Loaded configuration from {config_file}")
+          else:
+              # Fallback to default configuration
+              config = {
+                  "entrypoint": {
+                      "module": "prod_train_save_pipeline",
+                      "function": "training_pipeline"
+                  },
+                  "metadata": {
+                      "hyperparameters": {"epochs": 2},
+                      "model_name": "default-model",
+                      "prod_flag": True
+                  }
+              }
+              print(f"Using default configuration (no {config_file} found)")
+          
+          # Dynamic import of the pipeline function
+          module_name = config["entrypoint"]["module"]
+          function_name = config["entrypoint"]["function"]
+          
+          print(f"Importing {function_name} from {module_name}")
+          module = importlib.import_module(module_name)
+          pipeline_function = getattr(module, function_name)
+          
+          # Build metadata by merging config defaults with runtime values
+          metadata = config.get("metadata", {}).copy()
+          metadata.update({
               "version": "${VERSION}",
               "cluster_domain": "$(params.CLUSTER_DOMAIN)",
-              "model_storage_pvc": "$(params.MODEL_STORAGE_PVC)",
-              "prod_flag": True
-          }
+              "model_storage_pvc": "model-pvc"
+          })
           
           print(f"Compiling pipeline with metadata: {metadata}")
           kfp.compiler.Compiler().compile(
-              training_pipeline, 
-              'parts-pipeline.yaml', 
+              pipeline_function, 
+              '$(params.PIPELINE_NAME).yaml', 
               pipeline_parameters=metadata
           )
-          print("Pipeline compiled successfully to parts-pipeline.yaml")
+          print("Pipeline compiled successfully to $(params.PIPELINE_NAME).yaml")
           EOF
           
           # Execute the compilation
           python3 compile_pipeline.py
           
           # Verify the compiled file exists
-          if [ -f "parts-pipeline.yaml" ]; then
+          if [ -f "$(params.PIPELINE_NAME).yaml" ]; then
             echo "Pipeline compilation successful"
-            ls -la parts-pipeline.yaml
+            ls -la $(params.PIPELINE_NAME).yaml
           else
-            echo "ERROR: Pipeline compilation failed - parts-pipeline.yaml not found"
+            echo "ERROR: Pipeline compilation failed - $(params.PIPELINE_NAME).yaml not found"
             exit 1
           fi

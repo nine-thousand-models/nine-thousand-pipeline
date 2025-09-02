@@ -7,7 +7,7 @@ spec:
   workspaces:
     - name: output
   params:
-    - name: MODEL_NAME
+    - name: PIPELINE_NAME
       description: Name of the model pipeline
       type: string
     - name: WORK_DIRECTORY
@@ -16,13 +16,13 @@ spec:
   steps:
     - name: create-cr
       workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
-      image: registry.redhat.io/openshift4/ose-cli:latest
+      image: registry.redhat.io/ubi9/python-311@sha256:fc669a67a0ef9016c3376b2851050580b3519affd5ec645d629fd52d2a8b8e4a
       command: ["/bin/bash", "-c"]
       args:
         - |
           set -e
           
-          MODEL_NAME="$(params.MODEL_NAME)"
+          PIPELINE_NAME="$(params.PIPELINE_NAME)"
           
           # Read version from file
           if [ -f "version" ]; then
@@ -33,26 +33,49 @@ spec:
             exit 1
           fi
           
-          echo "Creating PipelineVersion CR for ${MODEL_NAME} version ${VERSION}"
-          
-          # Verify compiled pipeline exists
-          if [ ! -f "parts-pipeline.yaml" ]; then
-            echo "ERROR: Compiled pipeline parts-pipeline.yaml not found"
+          if [ ! -f "${PIPELINE_NAME}.yaml" ]; then
+            echo "ERROR: Compiled pipeline ${PIPELINE_NAME}.yaml not found"
             exit 1
           fi
-          
-          # Create PipelineVersion CR
-          cat <<EOF | oc apply -f -
-          apiVersion: datasciencepipelinesapplications.opendatahub.io/v1alpha1
-          kind: PipelineVersion
-          metadata:
-            name: ${MODEL_NAME}-${VERSION}
-            namespace: data-science-pipelines
-          spec:
-            pipelineId: ${MODEL_NAME}
-            pipelineVersionId: ${VERSION}
-            pipelineSpec: |
-          $(cat parts-pipeline.yaml | sed 's/^/      /')
+
+          echo "Creating PipelineVersion CR for ${PIPELINE_NAME} version ${VERSION}"
+
+          python3 -m pip install kfp==2.9.0 kfp-kubernetes==1.3.0
+          cat << EOF | python3
+          import kfp
+          import os
+
+          pipeline_name = "${PIPELINE_NAME}"
+          version = "${VERSION}"
+
+          namespace_file_path =\
+              '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
+          with open(namespace_file_path, 'r') as namespace_file:
+              namespace = namespace_file.read()
+
+          kubeflow_endpoint =\
+              f'https://ds-pipeline-dspa.{namespace}.svc:8443'
+
+          sa_token_file_path = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+          with open(sa_token_file_path, 'r') as token_file:
+              bearer_token = token_file.read()
+
+          ssl_ca_cert =\
+              '/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt'
+
+          print(f'Connecting to Data Science Pipelines: {kubeflow_endpoint}')
+          client = kfp.Client(
+              host=kubeflow_endpoint,
+              existing_token=bearer_token,
+              ssl_ca_cert=ssl_ca_cert
+          )
+
+          kubeflow_pipeline_id = ""
+          for pipeline in client.list_pipelines().pipelines:
+            if pipeline.display_name == pipeline_name:
+              kubeflow_pipeline_id = pipeline.pipeline_id
+
+          client.upload_pipeline_version(f"{pipeline_name}.yaml", pipeline_version_name=f"{pipeline_name}-{version}", pipeline_id=kubeflow_pipeline_id)
           EOF
           
-          echo "PipelineVersion CR ${MODEL_NAME}-${VERSION} created successfully"
+          echo "PipelineVersion CR ${PIPELINE_NAME}-${VERSION} created successfully"
