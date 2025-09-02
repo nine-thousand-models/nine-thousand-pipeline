@@ -53,7 +53,8 @@ spec:
       """  
 
       data_source = pipeline_metadata.get("data_source", "")
-      model_name = pipeline_metadata.get("model_name", "")
+      # model_name = pipeline_metadata.get("model_name", "")
+      model_name = "$(params.MODEL_NAME)"
       kubeflow_pipeline = pipeline_metadata.get("kubeflow_pipeline", "")
       kubeflow_pipeline_version = pipeline_metadata.get("kubeflow_pipeline_version", "")
       cluster_domain = pipeline_metadata.get("cluster_domain", "")
@@ -120,7 +121,7 @@ spec:
       default_parameters = {}
       default_parameters['version'] = "$(params.GIT_SHORT_REVISION)"
       default_parameters['model_name'] = model_name
-      default_parameters['model_storage_pvc'] = "model-pvc"
+      default_parameters['model_storage_pvc'] = model_name+"-model"
       default_parameters['cluster_domain'] = "{{ .Values.cluster_domain }}"
       default_parameters['prod_flag'] = True
 
@@ -129,7 +130,7 @@ spec:
       print(f"Starting with parameters: {default_parameters}")
       run_id = client.run_pipeline(
         experiment_id="", 
-        job_name="test-run", 
+        job_name=model_name+"-run", 
         pipeline_id=kubeflow_pipeline_id, 
         version_id=kubeflow_pipeline_version_id,
         params=default_parameters

@@ -39,7 +39,7 @@ spec:
         with open(namespace_file_path, 'r') as namespace_file:
           namespace = namespace_file.read()
         
-        namespace = namespace.split("-")[0]+"-prod"
+        namespace = namespace
 
         environ["KF_PIPELINES_SA_TOKEN_PATH"] = "/var/run/secrets/kubernetes.io/serviceaccount/token"
   

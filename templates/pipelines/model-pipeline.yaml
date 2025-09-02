@@ -117,14 +117,14 @@ spec:
   #       - name: output
   #         workspace: shared-workspace
   #     params:
-  #       - name: APPLICATION_NAME
-  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: MODEL_NAME
+  #         value: "$(params.MODEL_NAME)"
   #       - name: PROJECT_NAME
   #         value: "{{ .Values.USER_NAME }}"
   #       - name: VERSION
   #         value: "$(params.GIT_SHORT_REVISION)"
   #       - name: WORK_DIRECTORY
-  #         value: "$(params.APPLICATION_NAME)/$(params.GIT_BRANCH)"
+  #         value: "$(params.MODEL_NAME)/$(params.GIT_BRANCH)"
   #       - name: OUTPUT_FORMAT
   #         value: table
   #   {{- end }}
@@ -140,14 +140,14 @@ spec:
   #       - name: output
   #         workspace: shared-workspace
   #     params:
-  #       - name: APPLICATION_NAME
-  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: MODEL_NAME
+  #         value: "$(params.MODEL_NAME)"
   #       - name: PROJECT_NAME
   #         value: "{{ .Values.USER_NAME }}"
   #       - name: VERSION
   #         value: "$(params.GIT_SHORT_REVISION)"
   #       - name: WORK_DIRECTORY
-  #         value: "$(params.APPLICATION_NAME)/$(params.GIT_BRANCH)"
+  #         value: "$(params.MODEL_NAME)/$(params.GIT_BRANCH)"
   #    {{- end }}
 
   #   # Generate SBOMs
@@ -161,14 +161,14 @@ spec:
   #       - name: output
   #         workspace: shared-workspace
   #     params:
-  #       - name: APPLICATION_NAME
-  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: MODEL_NAME
+  #         value: "$(params.MODEL_NAME)"
   #       - name: PROJECT_NAME
   #         value: "{{ .Values.USER_NAME }}"
   #       - name: VERSION
   #         value: "$(params.GIT_SHORT_REVISION)"
   #       - name: WORK_DIRECTORY
-  #         value: "$(params.APPLICATION_NAME)/$(params.GIT_BRANCH)"
+  #         value: "$(params.MODEL_NAME)/$(params.GIT_BRANCH)"
   #   {{- end }}
 
     # Fetch GitOps repository
@@ -221,26 +221,26 @@ spec:
         - name: PROJECT_NAME
           value: "fika"
           
-    # # update model metadata
-    # - name: update-model-metadata
-    #   taskRef:
-    #     name: update-model-metadata
-    #     kind: Task
-    #   runAfter:
-    #     - build-modelcar
-    #   params:
-    #     - name: MODEL_NAME
-    #       value: "$(params.MODEL_NAME)"
-    #     - name: VERSION
-    #       value: "$(params.GIT_SHORT_REVISION)"
-    #     - name: DEPLOY_ENVIRONMENT
-    #       value: "test"
-    #     - name: PROJECT_NAME
-    #       value: "fika"
-    #     - name: KFP_RUN_ID
-    #       value: "$(tasks.execute-ds-pipeline.results.KFP_RUN_ID)"
-    #     - name: GIT_COMMIT_AUTHOR
-    #       value: "$(params.GIT_COMMIT_AUTHOR)"
+    # update model metadata
+    - name: update-model-metadata
+      taskRef:
+        name: update-model-metadata
+        kind: Task
+      runAfter:
+        - build-modelcar
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: VERSION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: DEPLOY_ENVIRONMENT
+          value: "test"
+        - name: PROJECT_NAME
+          value: "fika"
+        - name: KFP_RUN_ID
+          value: "$(tasks.execute-ds-pipeline.results.KFP_RUN_ID)"
+        - name: GIT_COMMIT_AUTHOR
+          value: "$(params.GIT_COMMIT_AUTHOR)"
 
   #   # Raise a PR for prod
   #   - name: raise-pr-for-prod
@@ -253,8 +253,8 @@ spec:
   #       - name: output
   #         workspace: shared-workspace
   #     params:
-  #       - name: APPLICATION_NAME
-  #         value: "$(params.APPLICATION_NAME)"
+  #       - name: MODEL_NAME
+  #         value: "$(params.MODEL_NAME)"
   #       - name: VERSION
   #         value: "$(params.GIT_SHORT_REVISION)"
   #       - name: WORK_DIRECTORY
