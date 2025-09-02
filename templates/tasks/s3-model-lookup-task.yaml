@@ -39,23 +39,54 @@ spec:
         # Find models that match the S3 data source
         models_to_retrain=""
         
-        cd nine-thousand-models
+        cd model-specs/nine-thousand-models
         for model_file in *.json; do
           if [ -f "$model_file" ]; then
-            # Extract data_source from JSON and compare with S3 bucket
-            data_source=$(python3 -c "
+            echo "Processing model file: $model_file"
+            
+            # Extract and analyze data_source from JSON
+            python3 -c "
         import json
+        import sys
+        
         with open('$model_file', 'r') as f:
             data = json.load(f)
-        print(data.get('data_source', ''))
-        ")
+        
+        data_source = data.get('data_source', {})
+        
+        # Handle both old string format and new structured format
+        if isinstance(data_source, str):
+            # Legacy format: simple string matching
+            if data_source == '$S3_BUCKET' or '$S3_OBJECT_KEY'.find(data_source) >= 0:
+                print('MATCH')
+            else:
+                print('NO_MATCH')
+        elif isinstance(data_source, dict) and data_source.get('type') == 's3':
+            # New structured format
+            bucket = data_source.get('bucket', '')
+            prefix = data_source.get('prefix', '')
+            pattern = data_source.get('pattern', '*')
             
-            echo "Model file: $model_file, Data source: $data_source"
+            print(f'Checking S3 data source: bucket={bucket}, prefix={prefix}, pattern={pattern}')
             
-            # Check if this model's data source matches the S3 bucket or object pattern
-            if [[ "$data_source" == "$S3_BUCKET" ]] || [[ "$S3_OBJECT_KEY" == *"$data_source"* ]]; then
+            # Check if S3 event matches this model's data source
+            bucket_match = (bucket == '$S3_BUCKET')
+            prefix_match = ('$S3_OBJECT_KEY'.startswith(prefix) if prefix else True)
+            
+            if bucket_match and prefix_match:
+                print('MATCH')
+            else:
+                print('NO_MATCH')
+        else:
+            print('NO_MATCH')
+        " > /tmp/match_result
+            
+            match_result=$(cat /tmp/match_result | tail -1)
+            echo "Match result for $model_file: $match_result"
+            
+            if [ "$match_result" = "MATCH" ]; then
               model_name="${model_file%.json}"
-              echo "Match found! Model $model_name uses data source $data_source"
+              echo "Match found! Model $model_name needs retraining"
               if [ -z "$models_to_retrain" ]; then
                 models_to_retrain="$model_name"
               else
