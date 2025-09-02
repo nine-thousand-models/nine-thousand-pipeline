@@ -1,0 +1,99 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: kfp-pipeline-fan-out-task
+spec:
+  params:
+    - name: ADDED_FILES
+      description: List of added files in the commit
+      type: string
+      default: ""
+    - name: REMOVED_FILES
+      description: List of removed files in the commit
+      type: string
+      default: ""
+    - name: MODIFIED_FILES
+      description: List of modified files in the commit
+      type: string
+      default: ""
+    - name: TARGET_PIPELINE
+      description: Name of the Tekton pipeline to trigger for each pipeline folder
+      type: string
+      default: "kfp-deploy-pipeline"
+    - name: GIT_URL
+      description: The git repository url
+      type: string
+      default: ""
+    - name: GIT_REPO_NAME
+      description: The name of the repository
+      type: string
+      default: ""
+    - name: GIT_BRANCH
+      description: The git branch name
+      type: string
+      default: "main"
+    - name: GIT_SHORT_REVISION
+      description: Seven character git sha
+      type: string
+      default: ""
+    - name: GIT_COMMIT_AUTHOR
+      description: Author of the git commit
+      type: string
+      default: ""
+    - name: CLUSTER_DOMAIN
+      description: Cluster domain for kubeflow endpoint
+      type: string
+      default: ""
+  steps:
+    - name: process-pipeline-folders
+      image: registry.redhat.io/openshift4/ose-cli:latest
+      script: |
+        #!/bin/bash
+
+        curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/pipeline/latest/tkn-linux-amd64.tar.gz | tar --no-same-owner -xzf - -C /tmp tkn 
+        chmod -R 755 /tmp/tkn
+
+        set -euo pipefail
+
+        echo "Added files: $(params.ADDED_FILES)"
+        echo "Removed files: $(params.REMOVED_FILES)"
+        echo "Modified files: $(params.MODIFIED_FILES)"
+
+        # Combine ADDED + MODIFIED + REMOVED into one list, split by comma, deduplicate
+        all_files=$(echo "$(params.ADDED_FILES),$(params.MODIFIED_FILES),$(params.REMOVED_FILES)" | tr ',' '\n' | sed '/^$/d' | sort -u)
+
+        echo "All changed files:"
+        echo "$all_files"
+
+        # Extract unique pipeline folders from file paths
+        pipeline_folders=""
+        for f in $all_files; do
+          # Extract the first directory from the file path (assuming structure: pipeline-name/...)
+          pipeline_folder=$(echo "$f" | cut -d'/' -f1)
+          if [ ! -z "$pipeline_folder" ] && [ "$pipeline_folder" != "." ]; then
+            pipeline_folders="$pipeline_folders $pipeline_folder"
+          fi
+        done
+
+        # Deduplicate pipeline folders
+        unique_pipeline_folders=$(echo "$pipeline_folders" | tr ' ' '\n' | sed '/^$/d' | sort -u)
+
+        echo "Unique pipeline folders to process:"
+        echo "$unique_pipeline_folders"
+
+        # Trigger kfp-deploy-pipeline for each unique pipeline folder in parallel
+        for pipeline_folder in $unique_pipeline_folders; do
+          echo "Triggering $(params.TARGET_PIPELINE) for pipeline folder: $pipeline_folder"
+          /tmp/tkn pipeline start $(params.TARGET_PIPELINE) --prefix-name ${pipeline_folder} \
+            -p GIT_URL="$(params.GIT_URL)" \
+            -p GIT_BRANCH="$(params.GIT_BRANCH)" \
+            -p PIPELINE_NAME="$pipeline_folder" \
+            -p VERSION="$(params.GIT_SHORT_REVISION)" \
+            -p CLUSTER_DOMAIN="$(params.CLUSTER_DOMAIN)" \
+            -p FOLDER="$pipeline_folder" \
+            --workspace name=shared-workspace,claimName=shared-workspace \
+            --showlog &
+        done
+
+        # Wait for all background jobs
+        wait

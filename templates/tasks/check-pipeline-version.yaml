@@ -7,7 +7,7 @@ spec:
   workspaces:
     - name: output
   params:
-    - name: MODEL_NAME
+    - name: PIPELINE_NAME
       description: Name of the model pipeline
       type: string
     - name: WORK_DIRECTORY
@@ -22,7 +22,7 @@ spec:
         - |
           set -e
           
-          MODEL_NAME="$(params.MODEL_NAME)"
+          PIPELINE_NAME="$(params.PIPELINE_NAME)"
           
           # Read version from file
           if [ -f "version" ]; then
@@ -33,12 +33,60 @@ spec:
             exit 1
           fi
           
-          echo "Checking if PipelineVersion CR exists for ${MODEL_NAME} version ${VERSION}"
+          echo "Checking if Pipeline CR exists for ${PIPELINE_NAME}"
+          
+          # Check if Pipeline CR exists
+          if oc get pipeline "${PIPELINE_NAME}" 2>/dev/null; then
+            echo "Pipeline CR ${PIPELINE_NAME} exists"
+            PIPELINE_EXISTS=true
+          else
+            echo "Pipeline CR ${PIPELINE_NAME} does not exist"
+            PIPELINE_EXISTS=false
+          fi
+          
+          echo "Checking if PipelineVersion CR exists for ${PIPELINE_NAME} version ${VERSION}"
           
           # Check if PipelineVersion CR exists
-          if oc get pipelineversion "${MODEL_NAME}-${VERSION}" -n data-science-pipelines 2>/dev/null; then
-            echo "ERROR: PipelineVersion CR ${MODEL_NAME}-${VERSION} already exists"
-            exit 1
+          if oc get pipelineversion "${PIPELINE_NAME}-${VERSION}" 2>/dev/null; then
+            echo "PipelineVersion CR ${PIPELINE_NAME}-${VERSION} exists"
+            PIPELINEVERSION_EXISTS=true
           else
-            echo "PipelineVersion CR ${MODEL_NAME}-${VERSION} does not exist, proceeding..."
+            echo "PipelineVersion CR ${PIPELINE_NAME}-${VERSION} does not exist"
+            PIPELINEVERSION_EXISTS=false
+          fi
+          
+          # Logic based on existence states
+          if [ "$PIPELINE_EXISTS" = true ] && [ "$PIPELINEVERSION_EXISTS" = false ]; then
+            echo "Pipeline exists and PipelineVersion does not exist - proceeding..."
+          elif [ "$PIPELINE_EXISTS" = true ] && [ "$PIPELINEVERSION_EXISTS" = true ]; then
+            echo "ERROR: Both Pipeline and PipelineVersion already exist"
+            exit 1
+          elif [ "$PIPELINE_EXISTS" = false ]; then
+            echo "Pipeline does not exist, creating Pipeline first..."
+            
+            # Create Pipeline CR
+            cat <<EOF | oc apply -f -
+          apiVersion: pipelines.kubeflow.org/v2beta1
+          kind: Pipeline
+          metadata:
+            name: ${PIPELINE_NAME}
+            namespace: $(context.taskRun.namespace)
+          spec:
+            displayName: ${PIPELINE_NAME}
+          EOF
+            
+            if [ $? -eq 0 ]; then
+              echo "Pipeline CR ${PIPELINE_NAME} created successfully"
+            else
+              echo "ERROR: Failed to create Pipeline CR ${PIPELINE_NAME}"
+              exit 1
+            fi
+            
+            # Re-check PipelineVersion after Pipeline creation
+            if [ "$PIPELINEVERSION_EXISTS" = true ]; then
+              echo "ERROR: Pipeline was created but PipelineVersion already exists"
+              exit 1
+            else
+              echo "Pipeline created and PipelineVersion does not exist - proceeding..."
+            fi
           fi

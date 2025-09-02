@@ -1,0 +1,39 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: s3-model-retrain-trigger-template
+spec:
+  params:
+    - name: s3-bucket
+      description: S3 bucket name
+    - name: s3-object-key
+      description: S3 object key
+    - name: s3-event-name
+      description: S3 event name (e.g., s3:ObjectCreated:*)
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: s3-model-retrain-
+      spec:
+        pipelineRef:
+          name: s3-model-retrain-pipeline
+        workspaces:
+          - name: shared-workspace
+            persistentVolumeClaim:
+              claimName: shared-workspace
+          - name: model-specs-workspace
+            persistentVolumeClaim:
+              claimName: shared-workspace
+        params:
+          - name: S3_BUCKET
+            value: $(tt.params.s3-bucket)
+          - name: S3_OBJECT_KEY
+            value: $(tt.params.s3-object-key)
+          - name: S3_EVENT_NAME
+            value: $(tt.params.s3-event-name)
+          - name: GIT_URL
+            value: "{{ .Values.git_url | default "https://github.com/RHRolun/nine-thousand-models" }}"
+          - name: GIT_BRANCH
+            value: "main"

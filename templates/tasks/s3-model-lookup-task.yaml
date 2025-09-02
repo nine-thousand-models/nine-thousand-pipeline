@@ -1,0 +1,109 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: s3-model-lookup-task
+spec:
+  params:
+    - name: S3_BUCKET
+      description: S3 bucket name where data changed
+      type: string
+    - name: S3_OBJECT_KEY
+      description: S3 object key that changed
+      type: string
+    - name: TARGET_PIPELINE
+      description: Name of the pipeline to trigger for retraining
+      type: string
+      default: "ct-pipeline"
+    - name: GIT_URL
+      description: Git repository URL to pass to triggered pipelines
+      type: string
+  workspaces:
+    - name: model-specs
+      description: Workspace containing cloned model specifications
+  results:
+    - name: MODELS_TO_RETRAIN
+      description: Comma-separated list of model names that need retraining
+  steps:
+    - name: lookup-models
+      workingDir: $(workspaces.model-specs.path)
+      image: registry.redhat.io/ubi9/python-311:latest
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        S3_BUCKET="$(params.S3_BUCKET)"
+        S3_OBJECT_KEY="$(params.S3_OBJECT_KEY)"
+        
+        echo "S3 Event: Bucket=${S3_BUCKET}, Key=${S3_OBJECT_KEY}"
+        
+        # Find models that match the S3 data source
+        models_to_retrain=""
+        
+        cd nine-thousand-models
+        for model_file in *.json; do
+          if [ -f "$model_file" ]; then
+            # Extract data_source from JSON and compare with S3 bucket
+            data_source=$(python3 -c "
+        import json
+        with open('$model_file', 'r') as f:
+            data = json.load(f)
+        print(data.get('data_source', ''))
+        ")
+            
+            echo "Model file: $model_file, Data source: $data_source"
+            
+            # Check if this model's data source matches the S3 bucket or object pattern
+            if [[ "$data_source" == "$S3_BUCKET" ]] || [[ "$S3_OBJECT_KEY" == *"$data_source"* ]]; then
+              model_name="${model_file%.json}"
+              echo "Match found! Model $model_name uses data source $data_source"
+              if [ -z "$models_to_retrain" ]; then
+                models_to_retrain="$model_name"
+              else
+                models_to_retrain="$models_to_retrain,$model_name"
+              fi
+            fi
+          fi
+        done
+        
+        echo "Models to retrain: $models_to_retrain"
+        echo -n "$models_to_retrain" > $(results.MODELS_TO_RETRAIN.path)
+        
+    - name: trigger-retraining
+      image: registry.redhat.io/openshift4/ose-cli:latest
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        # Download tkn CLI
+        curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/pipeline/latest/tkn-linux-amd64.tar.gz | tar --no-same-owner -xzf - -C /tmp tkn 
+        chmod -R 755 /tmp/tkn
+        
+        MODELS_TO_RETRAIN=$(cat $(results.MODELS_TO_RETRAIN.path))
+        
+        if [ -z "$MODELS_TO_RETRAIN" ]; then
+          echo "No models need retraining for this S3 change"
+          exit 0
+        fi
+        
+        echo "Triggering retraining for models: $MODELS_TO_RETRAIN"
+        
+        # Trigger model pipeline for each model in parallel
+        IFS=',' read -ra MODEL_ARRAY <<< "$MODELS_TO_RETRAIN"
+        for model in "${MODEL_ARRAY[@]}"; do
+          echo "Triggering $(params.TARGET_PIPELINE) for model: $model"
+          /tmp/tkn pipeline start $(params.TARGET_PIPELINE) --prefix-name s3-retrain-${model} \
+            -p GIT_URL="$(params.GIT_URL)" \
+            -p GIT_REPO_NAME="nine-thousand-models" \
+            -p GIT_SHORT_REVISION="s3-trigger" \
+            -p GIT_COMMIT_AUTHOR="s3-event" \
+            -p MODEL_NAME="$model" \
+            -p PROJECT_NAME="fika" \
+            --workspace name=shared-workspace,claimName=shared-workspace \
+            --workspace name=model-workspace,claimName=model-pvc \
+            --showlog &
+        done
+        
+        # Wait for all background jobs
+        wait
+        
+        echo "All retraining pipelines triggered successfully"
