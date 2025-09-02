@@ -187,7 +187,7 @@ spec:
           workspace: shared-workspace
       params:
         - name: URL
-          value: "https://github.com/ckavili/nine-thousand-models-gitops.git"
+          value: "https://github.com/nine-thousand-models/nine-thousand-models-gitops.git"
         - name: REVISION
           value: "main"
         - name: SUBDIRECTORY

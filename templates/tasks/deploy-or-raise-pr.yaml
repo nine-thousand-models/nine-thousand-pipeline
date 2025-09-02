@@ -73,7 +73,7 @@ spec:
           git config --global --add safe.directory '*'
           git add $(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)/config.yaml
           git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || rc=$?
-          git remote set-url origin $(cat $HOME/.git-credentials)/ckavili/nine-thousand-models-gitops.git
+          git remote set-url origin $(cat $HOME/.git-credentials)/nine-thousand-models/nine-thousand-models-gitops.git
           echo "🫡 reading config file for testing"
           echo "....."
           cat $(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)/config.yaml
@@ -87,7 +87,7 @@ spec:
           git config --global --add safe.directory '*'
           git add prod/$(params.MODEL_NAME)/config.yaml
           git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || rc=$?
-          git remote set-url origin $(cat $HOME/.git-credentials)/ckavili/nine-thousand-models-gitops.git
+          git remote set-url origin $(cat $HOME/.git-credentials)/nine-thousand-models/nine-thousand-models-gitops.git
           git push origin $(params.MODEL_NAME)-$(params.VERSION)
           curl --location 'https://gitea-gitea.{{ .Values.cluster_domain }}/api/v1/repos/{{ .Values.USER_NAME }}/mlops-gitops/pulls' --user 'opentlc-mgr:myPassw0rd' --header 'accept: application/json' --header 'Content-Type: application/json' \
             --data '{
