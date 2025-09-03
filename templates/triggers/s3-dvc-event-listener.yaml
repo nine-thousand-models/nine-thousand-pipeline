@@ -1,0 +1,13 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: s3-dvc-event-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - name: s3-dvc-trigger
+      bindings:
+        - ref: s3-dvc-triggers
+      template:
+        ref: s3-dvc-trigger-template

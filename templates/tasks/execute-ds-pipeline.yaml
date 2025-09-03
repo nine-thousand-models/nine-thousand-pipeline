@@ -129,6 +129,7 @@ spec:
       default_parameters['cluster_domain'] = "{{ .Values.cluster_domain }}"
       default_parameters['prod_flag'] = True
       default_parameters['hyperparameters'] = model_hyperparameters
+      default_parameters['data_source'] = data_source
 
       # start a run
       print("🏃‍♂️ start a run")

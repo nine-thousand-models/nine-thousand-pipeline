@@ -2,7 +2,7 @@
 USER_NAME:  user1
 git_server: gitea.app.cluster.xyz
 cluster_domain: app.cluster.xyz
-model_git_url: https://github.com/RHRolun/nine-thousand-models
+model_git_url: https://github.com/nine-thousand-models/nine-thousand-models.git
 alert_trigger: false
 apply_feature_changes: false
 linting: false

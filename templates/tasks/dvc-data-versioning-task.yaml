@@ -1,0 +1,245 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: dvc-data-versioning-task
+spec:
+  description: |
+    This task versions data using DVC and updates model JSONs with new hashes
+  workspaces:
+    - name: data-repo
+      description: Workspace for the data repository
+    - name: model-specs
+      description: Workspace for model specifications
+  params:
+    - name: S3_RAW_BUCKET
+      type: string
+      description: S3 bucket containing raw data
+    - name: S3_OBJECT_KEY
+      type: string
+      description: S3 object key that changed (e.g., exhaust-data/data.parquet)
+    - name: S3_DVC_CACHE_BUCKET
+      type: string
+      description: S3 bucket for DVC cache storage
+    - name: GIT_USERNAME
+      type: string
+      description: Git username
+    - name: GIT_PASSWORD
+      type: string
+      description: Git password
+  results:
+    - name: dvc-hash
+      description: The new DVC hash for the updated dataset
+    - name: dataset-name
+      description: The dataset name that was updated
+  steps:
+    - name: dvc-version-data
+      image: python:3.9
+      script: |
+        #!/usr/bin/env python3
+        
+        import os
+        import subprocess
+        from pathlib import Path
+        import urllib.parse
+        
+        def run_command(command, cwd=None, check=True):
+            """Run shell command and return result"""
+            print(f"Running: {command}")
+            result = subprocess.run(command, shell=True, cwd=cwd, text=True, 
+                                  capture_output=True, check=False)
+            if result.stdout:
+                print(f"STDOUT: {result.stdout}")
+            if result.stderr:
+                print(f"STDERR: {result.stderr}")
+            if check and result.returncode != 0:
+                raise RuntimeError(f"Command failed with exit code {result.returncode}: {command}")
+            return result
+        
+        def extract_dataset_name(s3_key):
+            """Extract dataset name from S3 key (e.g., exhaust-data/data.parquet -> exhaust-data)"""
+            return s3_key.split('/')[0]
+        
+        def extract_filename(s3_key):
+            """Extract filename from S3 key (e.g., exhaust-data/data.parquet -> data.parquet)"""
+            return s3_key.split('/')[-1]
+        
+        def read_dvc_hash(dvc_file_path):
+            """Read DVC hash from .dvc file"""
+            with open(dvc_file_path, 'r') as file:
+                dvc_data = yaml.safe_load(file)
+                return dvc_data['outs'][0]['md5']
+        
+        # Get parameters
+        s3_raw_bucket = "$(params.S3_RAW_BUCKET)"
+        s3_object_key_raw = "$(params.S3_OBJECT_KEY)"
+        s3_dvc_cache_bucket = "$(params.S3_DVC_CACHE_BUCKET)"
+        git_username = "$(params.GIT_USERNAME)"
+        git_password = "$(params.GIT_PASSWORD)"
+        
+        # URL decode the S3 object key
+        s3_object_key = urllib.parse.unquote(s3_object_key_raw)
+        print(f"Raw S3 key: {s3_object_key_raw}")
+        print(f"Decoded S3 key: {s3_object_key}")
+        
+        # Extract dataset name and filename
+        dataset_name = extract_dataset_name(s3_object_key)
+        filename = extract_filename(s3_object_key)
+        print(f"Processing dataset: {dataset_name}")
+        print(f"Filename: {filename}")
+        
+        # Install Python dependencies
+        print("Installing Python dependencies...")
+        run_command("pip install dvc[s3]==3.1.0 PyYAML==6.0.2 GitPython==3.1.43", check=False)
+        
+        # Now import packages that were just installed
+        import yaml
+        import json
+        
+        # Configure git
+        run_command("git config --global user.name 'DVC Pipeline'")
+        run_command("git config --global user.email 'pipeline@nine-thousand.local'")
+        run_command("git config --global --add safe.directory '*'")
+        
+        # Debug AWS credentials
+        print("=== AWS Credentials Debug ===")
+        print(f"AWS_ACCESS_KEY_ID: {os.environ.get('AWS_ACCESS_KEY_ID', 'NOT SET')}")
+        print(f"AWS_SECRET_ACCESS_KEY: {'SET' if os.environ.get('AWS_SECRET_ACCESS_KEY') else 'NOT SET'}")
+        print(f"AWS_DEFAULT_REGION: {os.environ.get('AWS_DEFAULT_REGION', 'NOT SET')}")
+        print(f"AWS_S3_ENDPOINT: {os.environ.get('AWS_S3_ENDPOINT', 'NOT SET')}")
+        print("==============================")
+        
+        # Use cloned data repository
+        data_repo_dir = "/workspace/data-repo/data-repo"
+        
+        # Switch to main branch (git-clone leaves us in detached HEAD)
+        run_command("git checkout -B main", cwd=data_repo_dir)
+        
+        # Initialize DVC if needed
+        if not os.path.exists(f"{data_repo_dir}/.dvc"):
+            print("Initializing DVC...")
+            run_command("dvc init", cwd=data_repo_dir)
+            
+            # Configure DVC remotes like in jukebox (only on initialization)
+            run_command(f"dvc remote add --default s3-cache s3://{s3_dvc_cache_bucket}", cwd=data_repo_dir)
+            run_command(f"dvc remote modify s3-cache endpointurl {os.environ.get('AWS_S3_ENDPOINT')}", cwd=data_repo_dir)
+            run_command(f"dvc remote add data-source s3://{s3_raw_bucket}", cwd=data_repo_dir)
+            run_command(f"dvc remote modify data-source endpointurl {os.environ.get('AWS_S3_ENDPOINT')}", cwd=data_repo_dir)
+        
+        # Check if we need to configure endpoint URL (for non-AWS S3 like MinIO)
+        AWS_S3_ENDPOINT = os.environ.get('AWS_S3_ENDPOINT')
+        
+        # Create dataset-specific directory structure
+        dataset_dir = f"{data_repo_dir}/datasets/{dataset_name}"
+        os.makedirs(dataset_dir, exist_ok=True)
+        
+        # Use DVC import-url from within the dataset-specific directory
+        run_command(f"dvc import-url remote://data-source/{s3_object_key} --to-remote", cwd=dataset_dir)
+        
+        # The .dvc file is created by import-url in the dataset-specific directory
+        # DVC uses the actual filename from S3
+        dvc_file = f"{dataset_dir}/{filename}.dvc"
+        
+        # Read the new DVC hash
+        new_hash = read_dvc_hash(dvc_file)
+        print(f"New DVC hash: {new_hash}")
+        
+        # Commit changes to data repo (only if there are changes)
+        run_command("git add .", cwd=data_repo_dir)
+        commit_result = run_command(f"git commit -m 'Update {dataset_name} data version - hash: {new_hash[:8]}'", cwd=data_repo_dir, check=False)
+        if commit_result.returncode == 0:
+            print("Changes committed to data repo")
+            run_command("git push --set-upstream origin main", cwd=data_repo_dir)
+        else:
+            print("No changes to commit in data repo (data unchanged)")
+        
+        # Use cloned model repository
+        model_repo_dir = "/workspace/model-specs/model-specs"
+        
+        # Debug: Check what files are in the model repo
+        print(f"=== Model Repo Contents ===")
+        run_command("ls -la", cwd=model_repo_dir)
+        print("============================")
+        
+        # Debug: Show content of exhaust-predictor.json
+        exhaust_file = f"{model_repo_dir}/exhaust-predictor.json"
+        if os.path.exists(exhaust_file):
+            print(f"=== Content of exhaust-predictor.json ===")
+            with open(exhaust_file, 'r') as f:
+                content = f.read()
+                print(content[:500])  # First 500 chars
+            print("===========================================")
+        
+        # Find and update model JSONs that use this dataset
+        updated_models = []
+        for json_file in Path(model_repo_dir).glob("*.json"):
+            try:
+                with open(json_file, 'r') as f:
+                    model_data = json.load(f)
+            except json.JSONDecodeError as e:
+                print(f"Skipping invalid JSON file {json_file}: {e}")
+                continue
+            
+            # Check if this model uses the updated dataset
+            data_source = model_data.get('data_source', {})
+            
+            # Skip if data_source is not a dict (old format or invalid structure)
+            if not isinstance(data_source, dict):
+                print(f"Skipping {json_file.name}: data_source is not a dict (old format?)")
+                continue
+                
+            if (data_source.get('type') == 'dvc' and 
+                data_source.get('dataset', '').startswith(f"datasets/{dataset_name}/")):
+                
+                # Update the DVC hash and dataset path
+                model_data['data_source']['dvc_hash'] = new_hash
+                model_data['data_source']['dataset'] = f"datasets/{dataset_name}/{filename}"
+                
+                # Write back to file
+                with open(json_file, 'w') as f:
+                    json.dump(model_data, f, indent=2)
+                
+                updated_models.append(json_file.name)
+                print(f"Updated {json_file.name} with new hash: {new_hash}")
+        
+        if updated_models:
+            # Switch to main branch for model repo too
+            run_command("git checkout -B main", cwd=model_repo_dir)
+            # Commit changes to model repo (only if there are changes)
+            run_command("git add .", cwd=model_repo_dir)
+            commit_result = run_command(f"git commit -m 'Update DVC hash for {dataset_name} dataset - affects: {', '.join(updated_models)}'", cwd=model_repo_dir, check=False)
+            if commit_result.returncode == 0:
+                print("Changes committed to model repo")
+                run_command("git push --set-upstream origin main", cwd=model_repo_dir)
+            else:
+                print("No changes to commit in model repo")
+        else:
+            print("No models found that use this dataset")
+        
+        # Write results
+        with open("/tekton/results/dvc-hash", "w") as f:
+            f.write(new_hash)
+        
+        with open("/tekton/results/dataset-name", "w") as f:
+            f.write(dataset_name)
+        
+        print(f"DVC versioning complete for {dataset_name} with hash {new_hash}")
+      env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: data
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: data
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        - name: AWS_S3_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: data
+              key: AWS_S3_ENDPOINT
+              optional: true

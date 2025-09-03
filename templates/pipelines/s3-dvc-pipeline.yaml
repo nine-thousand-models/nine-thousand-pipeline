@@ -1,0 +1,125 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: s3-dvc-pipeline
+spec:
+  workspaces:
+    - name: shared-workspace
+    - name: data-repo-workspace
+    - name: model-specs-workspace
+  params:
+    - name: S3_RAW_BUCKET
+      type: string
+      description: S3 bucket name containing raw data
+    - name: S3_OBJECT_KEY
+      type: string
+      description: S3 object key that changed
+    - name: S3_EVENT_NAME
+      type: string
+      description: S3 event name
+    - name: S3_DVC_CACHE_BUCKET
+      type: string
+      description: S3 bucket for DVC cache storage
+      default: "dvc-cache-bucket"
+    - name: DATA_REPO_URL
+      type: string
+      description: Git repository URL for data versioning
+      default: "https://github.com/nine-thousand-models/nine-thousand-data"
+    - name: MODEL_REPO_URL
+      type: string
+      description: Git repository URL for model specifications
+    - name: GIT_BRANCH
+      type: string
+      default: "main"
+      description: Git branch to use
+    - name: GIT_USERNAME
+      type: string
+      description: Git username
+    - name: GIT_PASSWORD
+      type: string
+      description: Git password
+  tasks:
+    # Clone data repository
+    - name: fetch-data-repo
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: data-repo-workspace
+      params:
+        - name: URL
+          value: "$(params.DATA_REPO_URL)"
+        - name: REVISION
+          value: "$(params.GIT_BRANCH)"
+        - name: SUBDIRECTORY
+          value: "data-repo"
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: SSL_VERIFY
+          value: "false"
+
+    # Clone model specifications repository
+    - name: fetch-model-specs
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: model-specs-workspace
+      params:
+        - name: URL
+          value: "$(params.MODEL_REPO_URL)"
+        - name: REVISION
+          value: "$(params.GIT_BRANCH)"
+        - name: SUBDIRECTORY
+          value: "model-specs"
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: SSL_VERIFY
+          value: "false"
+
+    # Version data with DVC and update model JSONs
+    - name: dvc-version-data
+      taskRef:
+        name: dvc-data-versioning-task
+        kind: Task
+      workspaces:
+        - name: data-repo
+          workspace: data-repo-workspace
+        - name: model-specs
+          workspace: model-specs-workspace
+      params:
+        - name: S3_RAW_BUCKET
+          value: "$(params.S3_RAW_BUCKET)"
+        - name: S3_OBJECT_KEY
+          value: "$(params.S3_OBJECT_KEY)"
+        - name: S3_DVC_CACHE_BUCKET
+          value: "$(params.S3_DVC_CACHE_BUCKET)"
+        - name: GIT_USERNAME
+          value: "$(params.GIT_USERNAME)"
+        - name: GIT_PASSWORD
+          value: "$(params.GIT_PASSWORD)"
+      runAfter:
+        - fetch-data-repo
+        - fetch-model-specs
+  results:
+    - name: dvc-hash
+      description: The DVC hash of the versioned data
+      value: "$(tasks.dvc-version-data.results.dvc-hash)"
+    - name: dataset-name
+      description: The name of the dataset that was versioned
+      value: "$(tasks.dvc-version-data.results.dataset-name)"

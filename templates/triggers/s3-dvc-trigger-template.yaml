@@ -1,0 +1,51 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: s3-dvc-trigger-template
+spec:
+  params:
+    - name: s3-raw-bucket
+      description: S3 bucket name containing raw data
+    - name: s3-object-key
+      description: S3 object key that changed
+    - name: s3-event-name
+      description: S3 event name (e.g., s3:ObjectCreated:*)
+    - name: s3-dvc-cache-bucket
+      description: S3 bucket for DVC cache storage
+      default: "data-cache"
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: s3-dvc-
+      spec:
+        pipelineRef:
+          name: s3-dvc-pipeline
+        workspaces:
+          - name: shared-workspace
+            persistentVolumeClaim:
+              claimName: shared-workspace
+          - name: data-repo-workspace
+            persistentVolumeClaim:
+              claimName: shared-workspace
+          - name: model-specs-workspace
+            persistentVolumeClaim:
+              claimName: shared-workspace
+        params:
+          - name: S3_RAW_BUCKET
+            value: $(tt.params.s3-raw-bucket)
+          - name: S3_OBJECT_KEY
+            value: $(tt.params.s3-object-key)
+          - name: S3_EVENT_NAME
+            value: $(tt.params.s3-event-name)
+          - name: S3_DVC_CACHE_BUCKET
+            value: $(tt.params.s3-dvc-cache-bucket)
+          - name: DATA_REPO_URL
+            value: "{{ .Values.data_repo_url | default "https://github.com/nine-thousand-models/nine-thousand-data" }}"
+          - name: MODEL_REPO_URL
+            value: "{{ .Values.model_git_url | default "https://github.com/nine-thousand-models/nine-thousand-models" }}"
+          - name: GIT_USERNAME
+            value: "{{ .Values.git_username }}"
+          - name: GIT_PASSWORD
+            value: "{{ .Values.git_password }}"

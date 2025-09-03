@@ -1,0 +1,15 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: s3-dvc-triggers
+spec:
+  params:
+    - name: s3-raw-bucket
+      value: $(body.Records[0].s3.bucket.name)
+    - name: s3-object-key
+      value: $(body.Records[0].s3.object.key)
+    - name: s3-event-name
+      value: $(body.Records[0].eventName)
+    - name: s3-dvc-cache-bucket
+      value: "data-cache"
