@@ -106,70 +106,66 @@ spec:
         - scan-model
 
 
-  #   {{ if eq .Values.image_scan true }}
-  #   # Image Scanning
-  #   - name: image-scan
-  #     runAfter:
-  #     - build-modelcar
-  #     taskRef:
-  #       name: rox-image-scan
-  #     workspaces:
-  #       - name: output
-  #         workspace: shared-workspace
-  #     params:
-  #       - name: MODEL_NAME
-  #         value: "$(params.MODEL_NAME)"
-  #       - name: PROJECT_NAME
-  #         value: "{{ .Values.USER_NAME }}"
-  #       - name: VERSION
-  #         value: "$(params.GIT_SHORT_REVISION)"
-  #       - name: WORK_DIRECTORY
-  #         value: "$(params.MODEL_NAME)/$(params.GIT_BRANCH)"
-  #       - name: OUTPUT_FORMAT
-  #         value: table
-  #   {{- end }}
+    # Image Scanning
+    - name: image-scan
+      runAfter:
+      - build-modelcar
+      taskRef:
+        name: rox-image-scan
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: PROJECT_NAME
+          value: "fika"
+        - name: VERSION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: WORK_DIRECTORY
+          value: "$(params.GIT_REPO_NAME)/$(params.GIT_BRANCH)/$(params.MODEL_NAME)"
+        - name: OUTPUT_FORMAT
+          value: table
 
-  #   {{ if eq .Values.image_signing true }}
-  #   # Image Signing
-  #   - name: image-signing
-  #     runAfter:
-  #     - image-scan
-  #     taskRef:
-  #       name: image-signing
-  #     workspaces:
-  #       - name: output
-  #         workspace: shared-workspace
-  #     params:
-  #       - name: MODEL_NAME
-  #         value: "$(params.MODEL_NAME)"
-  #       - name: PROJECT_NAME
-  #         value: "{{ .Values.USER_NAME }}"
-  #       - name: VERSION
-  #         value: "$(params.GIT_SHORT_REVISION)"
-  #       - name: WORK_DIRECTORY
-  #         value: "$(params.MODEL_NAME)/$(params.GIT_BRANCH)"
-  #    {{- end }}
+    # Image Signing
+    - name: image-signing
+      runAfter:
+      - image-scan
+      taskRef:
+        name: image-signing
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: PROJECT_NAME
+          value: "fika"
+        - name: VERSION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: WORK_DIRECTORY
+          value: "$(params.GIT_REPO_NAME)/$(params.GIT_BRANCH)/$(params.MODEL_NAME)"
 
-  #   # Generate SBOMs
-  #   {{- if eq .Values.generate_sboms true }}
-  #   - name: generate-sbom
-  #     runAfter:
-  #     - image-signing
-  #     taskRef:
-  #       name: generate-sbom
-  #     workspaces:
-  #       - name: output
-  #         workspace: shared-workspace
-  #     params:
-  #       - name: MODEL_NAME
-  #         value: "$(params.MODEL_NAME)"
-  #       - name: PROJECT_NAME
-  #         value: "{{ .Values.USER_NAME }}"
-  #       - name: VERSION
-  #         value: "$(params.GIT_SHORT_REVISION)"
-  #       - name: WORK_DIRECTORY
-  #         value: "$(params.MODEL_NAME)/$(params.GIT_BRANCH)"
-  #   {{- end }}
+
+   # Generate SBOMs
+    - name: generate-sbom
+      runAfter:
+      - image-scan
+      taskRef:
+        name: generate-sbom
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: PROJECT_NAME
+          value: "fika"
+        - name: VERSION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: WORK_DIRECTORY
+          value: "$(params.GIT_REPO_NAME)/$(params.GIT_BRANCH)/$(params.MODEL_NAME)"
+
 
     # Fetch GitOps repository
     - name: fetch-gitops-repository
@@ -197,7 +193,7 @@ spec:
         - name: SSL_VERIFY
           value: "false"
       runAfter:
-        - build-modelcar
+        - generate-sbom
 
     # Update model version in Git
     - name: deploy-test

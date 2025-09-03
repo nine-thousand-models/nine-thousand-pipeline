@@ -1,4 +1,3 @@
-{{ if eq .Values.image_signing true }}
 ---
 apiVersion: tekton.dev/v1beta1
 kind: Task
@@ -8,7 +7,7 @@ spec:
   workspaces:
     - name: output
   params:
-    - name: APPLICATION_NAME
+    - name: MODEL_NAME
       description: Name of the application
       type: string
     - name: PROJECT_NAME
@@ -34,5 +33,4 @@ spec:
         chmod -R 775 /tmp/cosign
 
         oc registry login
-        /tmp/cosign sign --key k8s://$(params.PROJECT_NAME)-toolings/$(params.PROJECT_NAME)-cosign `oc registry info`/$(params.PROJECT_NAME)-test/$(params.APPLICATION_NAME):$(params.VERSION) --allow-insecure-registry
-{{- end }}
+        /tmp/cosign sign --key k8s://nine-thousand-pipelines/$(params.PROJECT_NAME)-cosign `oc registry info`/$(params.PROJECT_NAME)-test/$(params.MODEL_NAME):$(params.VERSION) --allow-insecure-registry

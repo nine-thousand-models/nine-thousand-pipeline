@@ -39,5 +39,5 @@ spec:
         echo "Building and Pushing the model image: $(params.MODEL_NAME):$(params.VERSION) to project: $(params.PROJECT_NAME)"
         oc new-build --binary --name=$(params.MODEL_NAME) -l app=$(params.MODEL_NAME) -l app.kubernetes.io/name=$(params.MODEL_NAME) --strategy=docker || rc=$?
         oc start-build $(params.MODEL_NAME) --from-dir=. --follow --wait
-        oc tag nine-thousand-pipelines/$(params.MODEL_NAME):latest $(params.PROJECT_NAME)/$(params.MODEL_NAME):$(params.VERSION)
+        oc tag nine-thousand-pipelines/$(params.MODEL_NAME):latest $(params.PROJECT_NAME)-test/$(params.MODEL_NAME):$(params.VERSION)
         oc tag nine-thousand-pipelines/$(params.MODEL_NAME):latest $(params.PROJECT_NAME)-prod/$(params.MODEL_NAME):$(params.VERSION)

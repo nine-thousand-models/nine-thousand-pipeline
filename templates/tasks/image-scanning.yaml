@@ -1,4 +1,3 @@
-{{ if eq .Values.image_scan true }}
 ---
 apiVersion: tekton.dev/v1beta1
 kind: Task
@@ -12,7 +11,7 @@ spec:
       type: string
       description: Secret containing the Stackrox endpoint and token as (username and password)
       default: rox-auth
-    - name: APPLICATION_NAME
+    - name: MODEL_NAME
       description: Name of the application
       type: string
     - name: PROJECT_NAME
@@ -48,6 +47,5 @@ spec:
         export NO_COLOR="True"
         curl -k -L -H "Authorization: Bearer $ROX_API_TOKEN" https://$ROX_ENDPOINT/api/cli/download/roxctl-linux --output roxctl  > /dev/null; echo "Getting roxctl"
         chmod +x roxctl > /dev/null
-        ./roxctl image scan --insecure-skip-tls-verify -e $ROX_ENDPOINT:443 --image image-registry.openshift-image-registry.svc:5000/$(params.PROJECT_NAME)-test/$(params.APPLICATION_NAME):$(params.VERSION) -o $(params.OUTPUT_FORMAT) --cluster my-cluster
-{{- end }}
+        ./roxctl image scan --insecure-skip-tls-verify -e $ROX_ENDPOINT:443 --image image-registry.openshift-image-registry.svc:5000/$(params.PROJECT_NAME)-test/$(params.MODEL_NAME):$(params.VERSION) -o $(params.OUTPUT_FORMAT) --cluster my-cluster
 

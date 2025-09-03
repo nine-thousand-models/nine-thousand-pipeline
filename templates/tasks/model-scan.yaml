@@ -18,5 +18,5 @@ spec:
     args:
     - |
       echo "Scanning the model: $(params.MODEL_NAME).onnx"
-      # python3 -m pip install modelscan[tensorflow] numpy==1.26.4
-      # modelscan -p $(params.MODEL_NAME).keras --show-skipped
+      python3 -m pip install modelscan[tensorflow] numpy==1.26.4
+      modelscan -p $(params.MODEL_NAME).keras --show-skipped
