@@ -43,23 +43,27 @@ spec:
       """
       pipeline metadata structure:
       {
-        "data_source": "example-window-data",
+        "data_source": {
+            "type": "s3",
+            "bucket": "data",
+            "prefix": "",
+            "pattern": "*.parquet"
+          },
         "model_name": "window-predictor-model",
         "kubeflow_pipeline": "parts-predictor-pipeline",
-        "kubeflow_pipeline_version": "v1-8-0",
-        "pipeline_entry_function": "prediction_pipeline",
-        "runtime_name": "window-predictor-runtime"
+        "kubeflow_pipeline_version": "parts-predictor-pipeline-v1-8-0",
+        "runtime_name": "window-predictor-runtime",
+        "model_hyperparameters": {
+          "epochs": 2
+        }
       }
       """  
 
-      data_source = pipeline_metadata.get("data_source", "")
-      # model_name = pipeline_metadata.get("model_name", "")
+      data_source = pipeline_metadata.get("data_source", {})
       model_name = "$(params.MODEL_NAME)"
       kubeflow_pipeline = pipeline_metadata.get("kubeflow_pipeline", "")
       kubeflow_pipeline_version = pipeline_metadata.get("kubeflow_pipeline_version", "")
-      cluster_domain = pipeline_metadata.get("cluster_domain", "")
-      pipeline_entry_function = pipeline_metadata.get("pipeline_entry_function", "")
-
+      model_hyperparameters = pipeline_metadata.get("model_hyperparameters", {})
 
       namespace_file_path =\
           '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
@@ -124,6 +128,7 @@ spec:
       default_parameters['model_storage_pvc'] = model_name+"-model"
       default_parameters['cluster_domain'] = "{{ .Values.cluster_domain }}"
       default_parameters['prod_flag'] = True
+      default_parameters['hyperparameters'] = model_hyperparameters
 
       # start a run
       print("🏃‍♂️ start a run")
