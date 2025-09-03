@@ -238,27 +238,27 @@ spec:
         - name: GIT_COMMIT_AUTHOR
           value: "$(params.GIT_COMMIT_AUTHOR)"
 
-  #   # Raise a PR for prod
-  #   - name: raise-pr-for-prod
-  #     taskRef:
-  #       name: deploy-or-raise-pr
-  #       kind: Task
-  #     runAfter:
-  #       - deploy-test
-  #     workspaces:
-  #       - name: output
-  #         workspace: shared-workspace
-  #     params:
-  #       - name: MODEL_NAME
-  #         value: "$(params.MODEL_NAME)"
-  #       - name: VERSION
-  #         value: "$(params.GIT_SHORT_REVISION)"
-  #       - name: WORK_DIRECTORY
-  #         value: "mlops-gitops/main/model-deployments/"
-  #       - name: DEPLOY_ENVIRONMENT
-  #         value: "prod"
-  #       - name: PROJECT_NAME
-  #         value: {{ .Values.USER_NAME }}
+    # Raise a PR for prod
+    - name: raise-pr-for-prod
+      taskRef:
+        name: deploy-or-raise-pr
+        kind: Task
+      runAfter:
+        - deploy-test
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: MODEL_NAME
+          value: "$(params.MODEL_NAME)"
+        - name: VERSION
+          value: "$(params.GIT_SHORT_REVISION)"
+        - name: WORK_DIRECTORY
+          value: "nine-thousand-models-gitops/main/$(params.MODEL_NAME)/"
+        - name: DEPLOY_ENVIRONMENT
+          value: "prod"
+        - name: PROJECT_NAME
+          value: "fika"
           
   # results:
   #   - name: KFP_RUN_ID

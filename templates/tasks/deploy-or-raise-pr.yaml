@@ -63,6 +63,12 @@ spec:
     - name: commit-changes
       workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
       image: quay.io/redhat-cop/ubi8-git:latest
+      env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: git-auth
+              key: password
       script: |
         #!/bin/sh
         # Commit the changes :P
@@ -90,14 +96,19 @@ spec:
           git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || rc=$?
           git remote set-url origin $(cat $HOME/.git-credentials)/nine-thousand-models/nine-thousand-models-gitops.git
           git push origin $(params.MODEL_NAME)-$(params.VERSION)
-          # curl --location 'https://gitea-gitea.{{ .Values.cluster_domain }}/api/v1/repos/{{ .Values.USER_NAME }}/mlops-gitops/pulls' --user 'opentlc-mgr:myPassw0rd' --header 'accept: application/json' --header 'Content-Type: application/json' \
-          #   --data '{
-          #       "assignee": "{{ .Values.USER_NAME }}",
-          #       "base": "main",
-          #       "body": "Experiment results can be found in [Model Registry](https://rhods-dashboard-redhat-ods-applications.{{ .Values.cluster_domain }}/modelRegistry/{{ .Values.USER_NAME }}-prod-registry/).",
-          #       "head": "$(params.MODEL_NAME)-$(params.VERSION)",
-          #       "title": "🤖 Model $(params.MODEL_NAME):$(params.VERSION) Deployment"
-          #   }'
+
+          curl --location \
+            --request POST "https://api.github.com/repos/nine-thousand-models/nine-thousand-models-gitops/pulls" \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GITHUB_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --header "Content-Type: application/json" \
+            --data '{
+              "title": "🤖 Model $(params.MODEL_NAME):$(params.VERSION) Prod Deployment",
+              "body": "Experiment results can be found in [Model Registry](https://rhods-dashboard-redhat-ods-applications.{{ .Values.cluster_domain }}/modelRegistry/nine-thousand-pipelines-registry).",
+              "head": "$(params.MODEL_NAME)-$(params.VERSION)",
+              "base": "main"
+            }'
 
             echo "☘️ A pull request is raised for prod $(params.MODEL_NAME) - v$(params.VERSION)"
         fi
