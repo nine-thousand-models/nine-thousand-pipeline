@@ -17,7 +17,7 @@ spec:
       description: S3 bucket containing raw data
     - name: S3_OBJECT_KEY
       type: string
-      description: S3 object key that changed (e.g., exhaust-data/data.parquet)
+      description: S3 object key that changed (e.g., demand-forecaster-data/data.parquet)
     - name: S3_DVC_CACHE_BUCKET
       type: string
       description: S3 bucket for DVC cache storage
@@ -57,11 +57,11 @@ spec:
             return result
         
         def extract_dataset_name(s3_key):
-            """Extract dataset name from S3 key (e.g., exhaust-data/data.parquet -> exhaust-data)"""
+            """Extract dataset name from S3 key (e.g., demand-forecaster-data/data.parquet -> demand-forecaster-data)"""
             return s3_key.split('/')[0]
         
         def extract_filename(s3_key):
-            """Extract filename from S3 key (e.g., exhaust-data/data.parquet -> data.parquet)"""
+            """Extract filename from S3 key (e.g., demand-forecaster-data/data.parquet -> data.parquet)"""
             return s3_key.split('/')[-1]
         
         def read_dvc_hash(dvc_file_path):
@@ -160,15 +160,6 @@ spec:
         print(f"=== Model Repo Contents ===")
         run_command("ls -la", cwd=model_repo_dir)
         print("============================")
-        
-        # Debug: Show content of exhaust-predictor.json
-        exhaust_file = f"{model_repo_dir}/exhaust-predictor.json"
-        if os.path.exists(exhaust_file):
-            print(f"=== Content of exhaust-predictor.json ===")
-            with open(exhaust_file, 'r') as f:
-                content = f.read()
-                print(content[:500])  # First 500 chars
-            print("===========================================")
         
         # Find and update model JSONs that use this dataset
         updated_models = []
