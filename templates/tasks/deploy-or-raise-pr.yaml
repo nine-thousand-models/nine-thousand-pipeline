@@ -30,6 +30,9 @@ spec:
     - name: patch-argo-conf
       workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
       image: quay.io/redhat-cop/tekton-task-helm:3.6.3
+      env:
+        - name: HOME
+          value: /tmp
       script: |
         #!/bin/sh
 
@@ -64,51 +67,87 @@ spec:
       workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
       image: quay.io/redhat-cop/ubi8-git:latest
       env:
-        - name: GITHUB_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: git-auth
-              key: password
+        - name: HOME
+          value: /tmp
       script: |
         #!/bin/sh
-        # Commit the changes :P
-        if [[ $(params.DEPLOY_ENVIRONMENT) == "test" ]]; then
-          git config --global user.email "tekton@mlops.bot.com"
-          git config --global user.name "🐈 Tekton 🐈"
-          git config --global push.default simple
-          git config --global --add safe.directory '*'
-          git pull origin main
-          git add $(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)/config.yaml
-          git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || rc=$?
-          git remote set-url origin $(cat $HOME/.git-credentials)/nine-thousand-models/nine-thousand-models-gitops.git
-          echo "🫡 reading config file for testing"
-          echo "....."
-          cat $(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)/config.yaml
-          echo "I will push things at some point"
+        set -eu
+
+        # ⚠️ Hardcoded creds (works, but insecure)
+        GIT_USER="user1"
+        GIT_PASS="thisisthepassword"
+
+        GITEA_HOST="gitea-gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com"
+        OWNER="user1"
+        REPO="nine-thousand-models-gitops"
+
+        # Git remote (basic auth in URL)
+        GIT_REMOTE="https://${GIT_USER}:${GIT_PASS}@${GITEA_HOST}/${OWNER}/${REPO}.git"
+
+        # Gitea API
+        API_BASE="https://${GITEA_HOST}/api/v1"
+
+        git config --global user.email "tekton@mlops.bot.com"
+        git config --global user.name "🐈 Tekton 🐈"
+        git config --global push.default simple
+        git config --global --add safe.directory '*'
+
+        git remote set-url origin "$GIT_REMOTE"
+
+        if [ "$(params.DEPLOY_ENVIRONMENT)" = "test" ]; then
+          # Fetch latest changes and handle local modifications
+          git fetch origin main
+
+          # Stash local changes from patch-argo-conf step
+          git stash
+
+          # Reset to origin/main to avoid divergent branches
+          git checkout -B main origin/main
+
+          # Restore local changes
+          git stash pop || true
+
+          git add "$(params.DEPLOY_ENVIRONMENT)/$(params.MODEL_NAME)/config.yaml"
+          git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || true
           git push origin HEAD:main
-          echo "🫡push completed"
-        elif [[ $(params.DEPLOY_ENVIRONMENT) == "prod" ]]; then
-          git config --global user.email "tekton@mlops.bot.com"
-          git config --global user.name "🐈 Tekton 🐈"
-          git config --global push.default simple
-          git config --global --add safe.directory '*'
-          git add prod/$(params.MODEL_NAME)/config.yaml
-          git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || rc=$?
-          git remote set-url origin $(cat $HOME/.git-credentials)/nine-thousand-models/nine-thousand-models-gitops.git
-          git push origin $(params.MODEL_NAME)-$(params.VERSION)
+          echo "🫡 push completed (test)"
 
-          curl --location \
-            --request POST "https://api.github.com/repos/nine-thousand-models/nine-thousand-models-gitops/pulls" \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer $GITHUB_TOKEN" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            --header "Content-Type: application/json" \
-            --data '{
-              "title": "🤖 Model $(params.MODEL_NAME):$(params.VERSION) Prod Deployment",
-              "body": "Experiment results can be found in [Model Registry](https://rhods-dashboard-redhat-ods-applications.{{ .Values.cluster_domain }}/modelRegistry/nine-thousand-pipelines-registry).",
-              "head": "$(params.MODEL_NAME)-$(params.VERSION)",
-              "base": "main"
-            }'
+        elif [ "$(params.DEPLOY_ENVIRONMENT)" = "prod" ]; then
+          BRANCH="$(params.MODEL_NAME)-$(params.VERSION)"
 
-            echo "☘️ A pull request is raised for prod $(params.MODEL_NAME) - v$(params.VERSION)"
+          # Fetch latest changes and handle local modifications
+          git fetch origin main
+
+          # Stash local changes from patch-argo-conf step
+          git stash
+
+          # Make sure we have main locally, then branch off it
+          git checkout -B "$BRANCH" "origin/main"
+
+          # Restore local changes
+          git stash pop || true
+
+          # Commit prod config changes on the branch
+          git add "prod/$(params.MODEL_NAME)/config.yaml"
+          git commit -m "🚀 AUTOMATED COMMIT - Deployment of $(params.MODEL_NAME) for version $(params.VERSION) 🚀" || true
+
+          # Push the branch (NOT main)
+          git push -u origin "HEAD:${BRANCH}"
+          echo "🫡 pushed branch ${BRANCH} (prod)"
+
+          # Create PR in Gitea: branch -> main
+          # If your Gitea has a self-signed cert, add: curl -k ...
+          curl -sS -u "${GIT_USER}:${GIT_PASS}" \
+            -H "Content-Type: application/json" \
+            -X POST "${API_BASE}/repos/${OWNER}/${REPO}/pulls" \
+            -d "{
+              \"title\": \"🤖 Model $(params.MODEL_NAME):$(params.VERSION) Prod Deployment\",
+              \"body\": \"Automated prod deployment PR for $(params.MODEL_NAME) version $(params.VERSION).\\n\\n(Generated by Tekton)\",
+              \"head\": \"${BRANCH}\",
+              \"base\": \"main\"
+            }"
+
+          echo "☘️ PR created for prod $(params.MODEL_NAME) - v$(params.VERSION)"
         fi
+
+

@@ -112,6 +112,7 @@ spec:
           -p MODEL_NAME="$model_name" \
           --workspace name=shared-workspace,claimName=$shared_pvc_name \
           --workspace name=model-workspace,claimName=$model_pvc_name \
+          --serviceaccount pipeline \
           --showlog &
         done
 

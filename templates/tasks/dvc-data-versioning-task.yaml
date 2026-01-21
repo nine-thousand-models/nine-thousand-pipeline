@@ -35,9 +35,12 @@ spec:
   steps:
     - name: dvc-version-data
       image: python:3.9
+      env:
+        - name: HOME
+          value: /tmp
       script: |
         #!/usr/bin/env python3
-        
+
         import os
         import subprocess
         from pathlib import Path
@@ -90,7 +93,7 @@ spec:
         
         # Install Python dependencies
         print("Installing Python dependencies...")
-        run_command("pip install dvc[s3]==3.1.0 PyYAML==6.0.2 GitPython==3.1.43", check=False)
+        run_command("pip install dvc[s3]==3.1.0 PyYAML==6.0.2 GitPython==3.1.43 pathspec==0.11.2", check=False)
         
         # Now import packages that were just installed
         import yaml
@@ -111,24 +114,29 @@ spec:
         
         # Use cloned data repository
         data_repo_dir = "/workspace/data-repo/data-repo"
-        
-        # Switch to main branch (git-clone leaves us in detached HEAD)
-        run_command("git checkout -B main", cwd=data_repo_dir)
+
+        # Configure git remote with authentication for Gitea
+        data_repo_remote = f"https://{git_username}:{git_password}@gitea-gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com/{git_username}/nine-thousand-data.git"
+        run_command(f"git remote set-url origin {data_repo_remote}", cwd=data_repo_dir)
+
+        # Fetch and switch to main branch (git-clone leaves us in detached HEAD)
+        run_command("git fetch origin main", cwd=data_repo_dir)
+        run_command("git checkout -B main origin/main", cwd=data_repo_dir)
         
         # Initialize DVC if needed
         if not os.path.exists(f"{data_repo_dir}/.dvc"):
             print("Initializing DVC...")
             run_command("dvc init", cwd=data_repo_dir)
-            
-            # Configure DVC remotes like in jukebox (only on initialization)
+
+            # Add DVC remotes
             run_command(f"dvc remote add --default s3-cache s3://{s3_dvc_cache_bucket}", cwd=data_repo_dir)
-            run_command(f"dvc remote modify s3-cache endpointurl {os.environ.get('AWS_S3_ENDPOINT')}", cwd=data_repo_dir)
             run_command(f"dvc remote add data-source s3://{s3_raw_bucket}", cwd=data_repo_dir)
-            run_command(f"dvc remote modify data-source endpointurl {os.environ.get('AWS_S3_ENDPOINT')}", cwd=data_repo_dir)
-        
-        # Check if we need to configure endpoint URL (for non-AWS S3 like MinIO)
-        AWS_S3_ENDPOINT = os.environ.get('AWS_S3_ENDPOINT')
-        
+
+        # Always update endpoint URLs to match current environment
+        print(f"Configuring DVC remotes with endpoint: {os.environ.get('AWS_S3_ENDPOINT')}")
+        run_command(f"dvc remote modify s3-cache endpointurl {os.environ.get('AWS_S3_ENDPOINT')}", cwd=data_repo_dir)
+        run_command(f"dvc remote modify data-source endpointurl {os.environ.get('AWS_S3_ENDPOINT')}", cwd=data_repo_dir)
+
         # Create dataset-specific directory structure
         dataset_dir = f"{data_repo_dir}/datasets/{dataset_name}"
         os.makedirs(dataset_dir, exist_ok=True)
@@ -149,7 +157,16 @@ spec:
         commit_result = run_command(f"git commit -m 'Update {dataset_name} data version - hash: {new_hash[:8]}'", cwd=data_repo_dir, check=False)
         if commit_result.returncode == 0:
             print("Changes committed to data repo")
-            run_command("git push --set-upstream origin main", cwd=data_repo_dir)
+            # Fetch and handle potential conflicts before pushing
+            run_command("git fetch origin main", cwd=data_repo_dir)
+            # Try to rebase our commit on top of remote changes
+            rebase_result = run_command("git rebase origin/main", cwd=data_repo_dir, check=False)
+            if rebase_result.returncode != 0:
+                print("Rebase failed, aborting and using force push")
+                run_command("git rebase --abort", cwd=data_repo_dir, check=False)
+                run_command("git push --force origin main", cwd=data_repo_dir)
+            else:
+                run_command("git push origin main", cwd=data_repo_dir)
         else:
             print("No changes to commit in data repo (data unchanged)")
         
@@ -194,14 +211,49 @@ spec:
                 print(f"Updated {json_file.name} with new hash: {new_hash}")
         
         if updated_models:
-            # Switch to main branch for model repo too
-            run_command("git checkout -B main", cwd=model_repo_dir)
+            # Configure git remote with authentication for Gitea
+            model_repo_remote = f"https://{git_username}:{git_password}@gitea-gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com/{git_username}/nine-thousand-models.git"
+            run_command(f"git remote set-url origin {model_repo_remote}", cwd=model_repo_dir)
+
+            # Fetch and switch to main branch for model repo
+            run_command("git fetch origin main", cwd=model_repo_dir)
+            run_command("git checkout -B main origin/main", cwd=model_repo_dir)
+
+            # Re-apply our changes (they were made before checkout)
+            # We need to update the files again since we just reset to origin/main
+            for json_file in Path(model_repo_dir).glob("*.json"):
+                try:
+                    with open(json_file, 'r') as f:
+                        model_data = json.load(f)
+                except json.JSONDecodeError:
+                    continue
+
+                data_source = model_data.get('data_source', {})
+                if not isinstance(data_source, dict):
+                    continue
+
+                if (data_source.get('type') == 'dvc' and
+                    data_source.get('dataset', '').startswith(f"datasets/{dataset_name}/")):
+                    model_data['data_source']['dvc_hash'] = new_hash
+                    model_data['data_source']['dataset'] = f"datasets/{dataset_name}/{filename}"
+                    with open(json_file, 'w') as f:
+                        json.dump(model_data, f, indent=2)
+
             # Commit changes to model repo (only if there are changes)
             run_command("git add .", cwd=model_repo_dir)
             commit_result = run_command(f"git commit -m 'Update DVC hash for {dataset_name} dataset - affects: {', '.join(updated_models)}'", cwd=model_repo_dir, check=False)
             if commit_result.returncode == 0:
                 print("Changes committed to model repo")
-                run_command("git push --set-upstream origin main", cwd=model_repo_dir)
+                # Fetch and handle potential conflicts before pushing
+                run_command("git fetch origin main", cwd=model_repo_dir)
+                # Try to rebase our commit on top of remote changes
+                rebase_result = run_command("git rebase origin/main", cwd=model_repo_dir, check=False)
+                if rebase_result.returncode != 0:
+                    print("Rebase failed, aborting and using force push")
+                    run_command("git rebase --abort", cwd=model_repo_dir, check=False)
+                    run_command("git push --force origin main", cwd=model_repo_dir)
+                else:
+                    run_command("git push origin main", cwd=model_repo_dir)
             else:
                 print("No changes to commit in model repo")
         else:

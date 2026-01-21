@@ -18,7 +18,7 @@ spec:
             key: branch_name
           - expression: body.repository.name
             key: repo_name
-          - expression: body.pusher.name
+          - expression: body.pusher.login
             key: commit_author
           - expression: body.head_commit.added.join(',')
             key: added_files
@@ -36,7 +36,7 @@ spec:
     - name: git-repo-name
       value: $(body.repository.name)
     - name: git-commit-author
-      value: $(body.pusher.name)
+      value: $(body.pusher.login)
     - name: added-files
       value: $(extensions.added_files)
     - name: removed-files

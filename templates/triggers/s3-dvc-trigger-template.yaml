@@ -20,6 +20,7 @@ spec:
       metadata:
         generateName: s3-dvc-
       spec:
+        serviceAccountName: pipeline
         pipelineRef:
           name: s3-dvc-pipeline
         workspaces:
@@ -42,9 +43,9 @@ spec:
           - name: S3_DVC_CACHE_BUCKET
             value: $(tt.params.s3-dvc-cache-bucket)
           - name: DATA_REPO_URL
-            value: "{{ .Values.data_repo_url | default "https://github.com/nine-thousand-models/nine-thousand-data" }}"
+            value: "{{ .Values.data_repo_url | default "https://gitea-gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com/user1/nine-thousand-data" }}"
           - name: MODEL_REPO_URL
-            value: "{{ .Values.model_git_url | default "https://github.com/nine-thousand-models/nine-thousand-models" }}"
+            value: "{{ .Values.model_git_url | default "https://gitea-gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com/user1/nine-thousand-models" }}"
           - name: GIT_USERNAME
             value: "{{ .Values.git_username }}"
           - name: GIT_PASSWORD

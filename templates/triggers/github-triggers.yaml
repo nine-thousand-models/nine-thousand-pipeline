@@ -32,7 +32,7 @@ spec:
     - name: git-repo-name
       value: $(body.repository.name)
     - name: git-commit-author
-      value: $(body.pusher.name)
+      value: $(body.pusher.login)
     - name: added_files
       value: $(extensions.added_files)
     - name: removed_files

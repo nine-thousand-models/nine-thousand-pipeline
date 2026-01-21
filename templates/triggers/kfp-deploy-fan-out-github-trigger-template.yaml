@@ -27,6 +27,7 @@ spec:
       metadata:
         generateName: kfp-deploy-fan-out-pipeline-
       spec:
+        serviceAccountName: pipeline
         pipelineRef:
           name: kfp-deploy-fan-out-pipeline
         workspaces:

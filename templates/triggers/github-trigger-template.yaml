@@ -27,6 +27,7 @@ spec:
       metadata:
         generateName: fan-out-pipeline-
       spec:
+        serviceAccountName: pipeline
         pipelineRef:
           name: fan-out-pipeline
         params:

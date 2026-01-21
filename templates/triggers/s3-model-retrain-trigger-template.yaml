@@ -17,6 +17,7 @@ spec:
       metadata:
         generateName: s3-model-retrain-
       spec:
+        serviceAccountName: pipeline
         pipelineRef:
           name: s3-model-retrain-pipeline
         workspaces:
@@ -34,6 +35,6 @@ spec:
           - name: S3_EVENT_NAME
             value: $(tt.params.s3-event-name)
           - name: GIT_URL
-            value: "{{ .Values.git_url | default "https://github.com/RHRolun/nine-thousand-models" }}"
+            value: "{{ .Values.git_url | default "https://gitea-gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com/user1/nine-thousand-models" }}"
           - name: GIT_BRANCH
             value: "main"

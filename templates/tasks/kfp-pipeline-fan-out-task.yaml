@@ -92,6 +92,7 @@ spec:
             -p CLUSTER_DOMAIN="$(params.CLUSTER_DOMAIN)" \
             -p FOLDER="$pipeline_folder" \
             --workspace name=shared-workspace,claimName=shared-workspace \
+            --serviceaccount pipeline \
             --showlog &
         done
 

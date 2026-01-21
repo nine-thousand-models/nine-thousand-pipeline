@@ -1,8 +1,8 @@
 ---
 USER_NAME:  user1
-git_server: gitea.app.cluster.xyz
-cluster_domain: app.cluster.xyz
-model_git_url: https://github.com/nine-thousand-models/nine-thousand-models.git
+git_server: gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com
+cluster_domain: apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com
+model_git_url: https://gitea-gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com/user1/nine-thousand-models.git
 alert_trigger: false
 apply_feature_changes: false
 linting: false
@@ -10,3 +10,5 @@ static_code_analysis: false
 image_scan: false
 image_signing: false
 generate_sboms: false
+git_username: user1
+git_password: thisisthepassword

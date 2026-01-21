@@ -132,7 +132,7 @@ spec:
       default_parameters['data_source'] = data_source
 
       # start a run
-      print("🏃‍♂️ start a run")
+      print("Starting a run")
       print(f"Starting with parameters: {default_parameters}")
       run_id = client.run_pipeline(
         experiment_id="", 
@@ -142,7 +142,7 @@ spec:
         params=default_parameters
       )
 
-      print("🥱 wait for the run to finish")
+      print("Waiting for the run to finish")
       # wait for the run to finish
       client.wait_for_run_completion(
           run_id=run_id.run_id, 
@@ -157,6 +157,6 @@ spec:
       with open(path, "w") as file:
           file.write(KFP_RUN_ID)
 
-      print("🎉 job finished 🙌")
+      print("Job finished successfully")
       EOF
 
