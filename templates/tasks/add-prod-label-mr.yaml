@@ -1,0 +1,87 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: add-prod-label-mr
+spec:
+  params:
+    - name: APPLICATION_NAME
+      description: Name of the application
+      type: string
+    - name: PROJECT_NAME
+      description: MLOps environment name :)
+      type: string
+    - name: DEPLOY_ENVIRONMENT
+      description: Environment to deploy the app
+      type: string
+    - name: GIT_COMMIT_AUTHOR
+      description: Author of the git commit
+    - name: WORK_DIRECTORY
+      description: Directory to start build in (handle multiple branches)
+      type: string
+  workspaces:
+    - name: output
+  steps:
+    - name: update-model-metadata
+      image: registry.redhat.io/ubi9/python-311@sha256:fc669a67a0ef9016c3376b2851050580b3519affd5ec645d629fd52d2a8b8e4a
+      workingDir: $(workspaces.output.path)/$(params.WORK_DIRECTORY)
+      command: ["/bin/sh", "-c"]
+      args:
+      - |
+        python3 -m pip install model-registry=="0.2.10" pyyaml
+        cat << 'EOF' | python3
+
+        from os import environ
+        import yaml
+        from model_registry import ModelRegistry 
+
+        # Path to your config.yaml file
+        config_file = "$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME)/config.yaml"
+
+        # Read and parse the YAML file
+        with open(config_file, "r") as file:
+            config_data = yaml.safe_load(file)
+
+        # Extract the version
+        app_version = config_data.get("version")
+
+        print(f"$(params.APPLICATION_NAME)\n{config_data}")
+
+        # Use PROJECT_NAME to construct registry address
+        namespace_file_path =\
+          '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
+        with open(namespace_file_path, 'r') as namespace_file:
+          namespace = namespace_file.read()
+
+        environ["KF_PIPELINES_SA_TOKEN_PATH"] = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+        server_address = f"https://{namespace}-registry-rest.{{ .Values.cluster_domain }}"
+        print(f"server_address: {server_address}")
+
+        registry = ModelRegistry(server_address=server_address, port=443, author="$(params.GIT_COMMIT_AUTHOR)", is_secure=False)
+
+        version = registry.get_model_version("$(params.APPLICATION_NAME)", app_version)
+        print(version)
+        version.author = "$(params.GIT_COMMIT_AUTHOR)"
+        registry.update(version)
+
+        # Add label
+        for version in registry.get_model_versions("$(params.APPLICATION_NAME)"):
+          if version.name != app_version and "$(params.DEPLOY_ENVIRONMENT)" in version.custom_properties.keys():
+              version.custom_properties.pop("$(params.DEPLOY_ENVIRONMENT)")
+              registry.update(version)
+              print(f"Removed label from {app_version}")
+          elif version.name == app_version:
+              version.custom_properties["$(params.DEPLOY_ENVIRONMENT)"]=""
+              registry.update(version)
+              print(f"Added label to {app_version}")
+
+        # Update the metadata
+        registry.update(version)
+
+        # Update Model URI
+        model = registry.get_model_artifact("$(params.APPLICATION_NAME)", app_version)
+        model.uri = f"oci://image-registry.openshift-image-registry.svc:5000/$(params.PROJECT_NAME)-$(params.DEPLOY_ENVIRONMENT)/$(params.APPLICATION_NAME):{app_version}"
+        registry.update(model)
+
+        EOF

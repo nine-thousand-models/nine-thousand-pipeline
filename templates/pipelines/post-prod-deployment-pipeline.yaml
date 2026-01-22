@@ -1,0 +1,66 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: post-prod-deploy-pipeline
+spec:
+  workspaces:
+    - name: shared-workspace
+  params:
+    - name: APPLICATION_NAME
+      type: string
+      default: ""
+    - name: PROJECT_NAME
+      type: string
+      default: "fika"
+    - name: GIT_COMMIT_AUTHOR
+      type: string
+      default: ""
+  tasks:
+    # Fetch GitOps repository
+    - name: fetch-gitops-repository
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: URL
+          value: "https://gitea-gitea.apps.cluster-r8s6x.r8s6x.sandbox1098.opentlc.com/user1/nine-thousand-models-gitops.git"
+        - name: REVISION
+          value: "main"
+        - name: SUBDIRECTORY
+          value: "nine-thousand-models-gitops/main"
+        - name: DELETE_EXISTING
+          value: "true"
+        - name: SSL_VERIFY
+          value: "false"
+
+    # update model metadata
+    - name: add-prod-label-to-modelregistry
+      taskRef:
+        name: add-prod-label-mr
+        kind: Task
+      runAfter:
+        - fetch-gitops-repository
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: APPLICATION_NAME
+          value: "$(params.APPLICATION_NAME)"
+        - name: DEPLOY_ENVIRONMENT
+          value: "prod"
+        - name: PROJECT_NAME
+          value: "$(params.PROJECT_NAME)"
+        - name: GIT_COMMIT_AUTHOR
+          value: "$(params.GIT_COMMIT_AUTHOR)"
+        - name: WORK_DIRECTORY
+          value: "nine-thousand-models-gitops/main/"

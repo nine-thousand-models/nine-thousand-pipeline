@@ -1,0 +1,28 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: Trigger
+metadata:
+  name: post-prod-deploy-trigger
+spec:
+  interceptors:
+     - ref:
+         name: "cel"
+       params:
+        - name: filter
+          value: >
+            body.commits.exists(c, c.modified.exists(m, m.matches('^prod/[^/]+/config\\.yaml$')))
+        - name: overlays
+          value:
+          # Extract model name from path like "prod/anomaly-detector/config.yaml" -> "anomaly-detector"
+          - expression: >
+              body.commits.map(c, c.modified).flatten().filter(m, m.matches('^prod/[^/]+/config\\.yaml$'))[0].split('/')[1]
+            key: application_name
+          - expression: body.commits[0].author.name
+            key: git_commit_author
+  bindings:
+    - name: application_name
+      value: $(extensions.application_name)
+    - name: git_commit_author
+      value: $(extensions.git_commit_author)
+  template:
+     ref: post-prod-deploy-trigger-template

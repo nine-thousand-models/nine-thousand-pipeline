@@ -1,0 +1,25 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: post-prod-deploy-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - triggerRef: post-prod-deploy-trigger
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: el-post-prod-deploy-listener
+spec:
+  to:
+    kind: Service
+    name: el-post-prod-deploy-listener
+    weight: 100
+  port:
+    targetPort: http-listener
+  wildcardPolicy: None
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

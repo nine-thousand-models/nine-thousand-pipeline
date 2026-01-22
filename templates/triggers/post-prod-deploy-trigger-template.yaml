@@ -1,0 +1,32 @@
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: post-prod-deploy-trigger-template
+spec:
+  params:
+    - name: application_name
+      description: The name of the application
+    - name: git_commit_author
+      description: Author of the git commit
+      default: "pipeline"
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        generateName: post-prod-deploy-pipeline-
+      spec:
+        serviceAccountName: pipeline
+        pipelineRef:
+          name: post-prod-deploy-pipeline
+        params:
+          - name: APPLICATION_NAME
+            value: $(tt.params.application_name)
+          - name: PROJECT_NAME
+            value: "fika"
+          - name: GIT_COMMIT_AUTHOR
+            value: $(tt.params.git_commit_author)
+        workspaces:
+        - name: shared-workspace
+          persistentVolumeClaim:
+            claimName: shared-workspace
